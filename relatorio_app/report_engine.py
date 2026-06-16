@@ -918,12 +918,8 @@ def prepare_photo(photo_path: Path, output_dir: Path, index: int) -> Path:
     output_path = output_dir / f"foto-{index:02d}.jpg"
     with Image.open(photo_path) as original:
         image = ImageOps.exif_transpose(original).convert("RGB")
-        image.thumbnail(PHOTO_MAX_SIZE, Image.Resampling.LANCZOS)
-        canvas = Image.new("RGB", PHOTO_MAX_SIZE, "white")
-        x = (PHOTO_MAX_SIZE[0] - image.width) // 2
-        y = (PHOTO_MAX_SIZE[1] - image.height) // 2
-        canvas.paste(image, (x, y))
-        canvas.save(output_path, quality=88, optimize=True)
+        fitted = ImageOps.fit(image, PHOTO_MAX_SIZE, method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+        fitted.save(output_path, quality=88, optimize=True)
     return output_path
 
 

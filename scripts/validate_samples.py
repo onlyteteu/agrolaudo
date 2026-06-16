@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 
 from openpyxl import load_workbook
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -134,6 +135,13 @@ def main() -> None:
     assert_equal(photo_worksheet["D209"].border.left.style, "medium", "borda esquerda primeira foto")
     assert_equal(photo_worksheet["J226"].border.right.style, "medium", "borda direita primeira foto")
     assert_equal(photo_worksheet["J226"].border.bottom.style, "medium", "borda inferior primeira foto")
+    prepared_photo = OUTPUT_DIR / "fotos-com-moldura-images" / "foto-01.jpg"
+    with Image.open(prepared_photo) as image:
+        assert_equal(image.size, (520, 330), "tamanho da foto preparada")
+        left_edge = [image.getpixel((0, y)) for y in range(image.height)]
+        right_edge = [image.getpixel((image.width - 1, y)) for y in range(image.height)]
+        if all(pixel == (255, 255, 255) for pixel in left_edge + right_edge):
+            raise AssertionError("foto preparada contem faixa branca lateral")
 
     for case in CASES:
         text = case["source"].read_text(encoding="utf-8")
