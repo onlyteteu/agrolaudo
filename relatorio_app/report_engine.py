@@ -137,7 +137,17 @@ def parse_narrative_report(text: str) -> dict[str, Any]:
         data["imoveis"] = structured_properties
         data["imovel_nome"] = format_property_names([str(item["nome"]) for item in structured_properties if item.get("nome")])
         totals = aggregate_property_totals(structured_properties)
-        data.update({key: value for key, value in totals.items() if value not in (None, "")})
+        detail_only = all(
+            item.get("atividade_principal") in (None, "") and item.get("principais_culturas") in (None, "")
+            for item in structured_properties
+        )
+        for key, value in totals.items():
+            if value in (None, ""):
+                continue
+            if detail_only:
+                data.setdefault(key, value)
+            else:
+                data[key] = value
     else:
         property_names = extract_property_names(compact, data.get("imovel_nome"), stop_pattern)
         if len(property_names) > 1:
@@ -333,6 +343,20 @@ def extract_rebanho(text: str) -> str | None:
 
 
 def parse_property_area_sections(text: str) -> list[dict[str, Any]]:
+    compact = normalize_spaces(text)
+    section = extract_section(
+        compact,
+        r"Dados\s+de\s+(?:Área|Ãrea|Area)\s+e\s+(?:Exploração|ExploraÃ§Ã£o|Exploracao)\s+por\s+Propriedade",
+        [r"\d+\.\s*TIPO", r"\d+\.\s*DESCRIÇÃO", r"\d+\.\s*DESCRIÃ‡ÃƒO", r"\d+\.\s*DESCRICAO"],
+    )
+    properties = parse_compact_property_area_section(section or "")
+    if properties:
+        return properties
+
+    detail_properties = parse_unit_detail_sections(compact)
+    if detail_properties:
+        return detail_properties
+
     lines = [line.strip() for line in text.splitlines()]
     start_index = None
     for index, line in enumerate(lines):
@@ -385,6 +409,83 @@ def parse_property_area_sections(text: str) -> list[dict[str, Any]]:
             current["principais_culturas"] = value
 
     return [item for item in properties if item.get("nome")]
+
+
+def parse_compact_property_area_section(section: str) -> list[dict[str, Any]]:
+    if not section:
+        return []
+
+    area_label = r"(?:Área|Ãrea|Area)\s+Total\s*\(ha\)\s*:"
+    pasture_label = r"(?:Área|Ãrea|Area)\s+de\s+Pastagens\s*\(ha\)\s*:"
+    crop_label = r"(?:Área|Ãrea|Area)\s+de\s+Cultivo\s*\(ha\)\s*:"
+    activity_label = r"Atividade\s+principal\s+desenvolvida\s*:"
+    cultures_label = r"Principais\s+culturas\s*:"
+    property_heading = r"(?:Fazenda|S[ií]tio|Sitio|Ch[aá]cara|Chacara|Grupo|Unidade)\s+"
+    next_property = rf"(?=\s*{property_heading}.{{2,180}}?{area_label}|$)"
+    pattern = re.compile(
+        rf"\s*(?P<name>{property_heading}.+?)\s*{area_label}\s*(?P<total>.*?)\s*"
+        rf"{pasture_label}\s*(?P<pasture>.*?)\s*"
+        rf"{crop_label}\s*(?P<crop>.*?)\s*"
+        rf"{activity_label}\s*(?P<activity>.*?)\s*"
+        rf"{cultures_label}\s*(?P<cultures>.*?){next_property}",
+        flags=re.IGNORECASE,
+    )
+
+    properties: list[dict[str, Any]] = []
+    for match in pattern.finditer(section):
+        name = clean_property_name(match.group("name"))
+        if not name:
+            continue
+        item: dict[str, Any] = {
+            "nome": name,
+            "area_total_ha": parse_decimal_pt(match.group("total")),
+            "area_pastagens_ha": parse_decimal_pt(match.group("pasture")),
+            "area_cultivo_ha": parse_decimal_pt(match.group("crop")),
+            "atividade_principal": clean_property_field(match.group("activity")),
+            "principais_culturas": clean_property_field(match.group("cultures")),
+        }
+        alqueires = extract_area_alqueires(match.group("total"))
+        if alqueires:
+            item["area_alqueires"] = parse_decimal_pt(alqueires)
+        properties.append(item)
+
+    return properties
+
+
+def parse_unit_detail_sections(text: str) -> list[dict[str, Any]]:
+    section = extract_section(
+        text,
+        r"Detalhamento\s+por\s+Unidade\s*\(ha\)",
+        [r"\d+\.\s*TIPO", r"\d+\.\s*DESCRIÇÃO", r"\d+\.\s*DESCRIÃ‡ÃƒO", r"\d+\.\s*DESCRICAO"],
+    )
+    if not section:
+        return []
+
+    pattern = re.compile(
+        r"(?P<name>(?:Fazenda|S[iÃ­]tio|Sitio|Ch[aÃ¡]cara|Chacara|Grupo|Unidade)\s+.+?)\s*:\s*"
+        r"(?P<total>\d[\d.,]*)\s*ha\s+brutos?\s*/\s*"
+        r"(?P<pasture>\d[\d.,]*)\s*ha\s+de\s+pastagens",
+        flags=re.IGNORECASE,
+    )
+    properties: list[dict[str, Any]] = []
+    for match in pattern.finditer(section):
+        total = parse_decimal_pt(match.group("total"))
+        pasture = parse_decimal_pt(match.group("pasture"))
+        item: dict[str, Any] = {
+            "nome": clean_property_name(match.group("name")),
+            "area_total_ha": total,
+            "area_pastagens_ha": pasture,
+        }
+        if isinstance(total, (int, float)) and isinstance(pasture, (int, float)):
+            item["area_cultivo_ha"] = round(float(total) - float(pasture), 2)
+        properties.append(item)
+    return properties
+
+
+def clean_property_field(value: Any) -> str:
+    text = str(clean_text_value(value) or "")
+    text = re.sub(r"\s+\d+\.\s*(?:TIPO|DESCRIÃ‡ÃƒO|DESCRICAO)\b.*$", "", text, flags=re.IGNORECASE)
+    return text.strip(" .;:-")
 
 
 def is_property_heading(value: str) -> bool:
@@ -500,6 +601,13 @@ def split_conjunction_property_names(value: str) -> list[str]:
 
 def clean_property_name(value: str) -> str:
     cleaned = clean_text_value(value)
+    cleaned = re.sub(r"\s+\d+\.\s*(?:TIPO|DESCRIÇÃO|DESCRIÃ‡ÃƒO|DESCRICAO)\b.*$", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(
+        r"\s+(?:Tipo\s+de\s+exploração|Tipo\s+de\s+exploraÃ§Ã£o|Tipo\s+de\s+exploracao|Atividades\s+desenvolvidas|Situação\s+produtiva|SituaÃ§Ã£o\s+produtiva|Situacao\s+produtiva|Dados\s+de\s+(?:Área|Ãrea|Area))\b.*$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
     cleaned = re.sub(r"^(?:as?|os?|das?|dos?|e|seguintes?)\s+", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s+(?:localizad[oa]s?|situad[oa]s?|compreend(?:e|em)|abrang(?:e|em)|totaliz(?:a|am)|possu(?:i|em))\b.*$", "", cleaned, flags=re.IGNORECASE)
     return cleaned.strip(" .;:-")

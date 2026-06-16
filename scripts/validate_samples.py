@@ -146,6 +146,71 @@ COMPLEXO PECUARIO COM CINCO UNIDADES PRODUTIVAS INTEGRADAS.
 """
 
 
+COLLAPSED_PROPERTY_TEXT = (
+    "1. DISCRIMINACAONome da propriedade: Fazenda Beira Rio e Fazenda Val da Onca"
+    "Tipo de exploracao: Propria"
+    "Dados de Area e Exploracao por Propriedade:"
+    "Fazenda Beira Rio"
+    "Area Total (ha): 580,80 ha"
+    "Area de Pastagens (ha): 406,56 ha"
+    "Area de Cultivo (ha): 174,24 ha"
+    "Atividade principal desenvolvida: Pecuaria mista"
+    "Principais culturas: Pastagens forrageiras"
+    "Fazenda Val da Onca"
+    "Area Total (ha): 580,80 ha"
+    "Area de Pastagens (ha): 406,56 ha"
+    "Area de Cultivo (ha): 174,24 ha"
+    "Atividade principal desenvolvida: Pecuaria mista"
+    "Principais culturas: Pastagens forrageiras"
+    "2. TIPO (Benfeitorias e Infraestrutura)"
+    "O projeto agropecuario fica em duas unidades produtivas."
+    "INVESTIMENTOS EM ANDAMENTO (Comentarios)"
+    "Investimentos integrados."
+    "OUTROS COMENTARIOS"
+    "Comentarios tecnicos."
+    "CONCLUSAO"
+    "Atividade regular."
+    "FRASES DIRETAS"
+    "OPERACAO INTEGRADA EM DUAS FAZENDAS."
+)
+
+
+COLLAPSED_GROUP_TEXT = (
+    "1. DISCRIMINACAONome da propriedade: Grupo Pedra (Unidades: Buriti e Aroeira)"
+    "Dados de Area e Exploracao por Propriedade:"
+    "Grupo Pedra - Unidade Buriti (Ituverava-SP)"
+    "Area Total (ha): 1.432,35 ha"
+    "Area de Pastagens (ha): 0,00 ha"
+    "Area de Cultivo (ha): 1.432,35 ha"
+    "Atividade principal desenvolvida: Cultivo comercial de Cana-de-Acucar"
+    "Principais culturas: Cana-de-Acucar"
+    "Grupo Pedra - Unidade Aroeira (Tupaciguara-MG)"
+    "Area Total (ha): 1.800,00 ha"
+    "Area de Pastagens (ha): 0,00 ha"
+    "Area de Cultivo (ha): 1.800,00 ha"
+    "Atividade principal desenvolvida: Cultivo comercial de Cana-de-Acucar e graos"
+    "Principais culturas: Cana-de-Acucar, Soja e Amendoim"
+    "2. TIPO (Benfeitorias e Infraestrutura)"
+    "O complexo agricola apresenta estrutura operacional robusta."
+)
+
+
+DETAIL_PROPERTY_TEXT = (
+    "1. DISCRIMINACAONome da propriedade: Fazenda Sao Jose e Fazenda Santo Antonio"
+    "Dados de Area e Exploracao:"
+    "Area Total (ha): 329,32 ha"
+    "Area de Pastagens (ha): 230,52 ha"
+    "Area de Cultivo (ha): 98,80 ha"
+    "Atividade principal desenvolvida: Pecuaria de corte"
+    "Principais culturas: Pastagens"
+    "Detalhamento por Unidade (ha):"
+    "Fazenda Sao Jose (Jaupaci-GO - 50,04 alqueires): 242,19 ha brutos / 169,53 ha de pastagens liquidas"
+    "Fazenda Santo Antonio (Palmeiras-GO - 18,00 alqueires): 87,12 ha brutos / 60,99 ha de pastagens liquidas"
+    "2. TIPO (Benfeitorias e Infraestrutura)"
+    "As unidades possuem infraestrutura produtiva."
+)
+
+
 def assert_equal(actual, expected, label: str) -> None:
     if isinstance(expected, float):
         if round(float(actual), 2) != round(expected, 2):
@@ -193,6 +258,22 @@ def main() -> None:
     assert_equal(sandro_worksheet["A28"].value, "O complexo pecuario apresenta infraestrutura integrada e alto padrao tecnico.", "sandro texto benfeitorias deslocado")
     assert_equal(sandro_worksheet["D94"].value, "Projeto com cinco unidades produtivas e manejo integrado.", "sandro investimentos deslocado")
     assert_equal(sandro_worksheet["D106"].value, "COMPLEXO PECUARIO COM CINCO UNIDADES PRODUTIVAS INTEGRADAS.", "sandro frase direta deslocada")
+
+    collapsed = parse_report_data(COLLAPSED_PROPERTY_TEXT)
+    assert_equal(collapsed.get("imovel_nome"), "Fazenda Beira Rio; Fazenda Val da Onca", "texto colado nomes limpos")
+    assert_equal(collapsed["imoveis"][0]["principais_culturas"], "Pastagens forrageiras", "texto colado culturas primeira propriedade")
+    assert_equal(collapsed["imoveis"][1]["nome"], "Fazenda Val da Onca", "texto colado segunda propriedade limpa")
+    assert_equal(collapsed.get("benfeitorias_descricao"), "O projeto agropecuario fica em duas unidades produtivas.", "texto colado benfeitorias separadas")
+
+    collapsed_group = parse_report_data(COLLAPSED_GROUP_TEXT)
+    assert_equal(collapsed_group.get("imovel_nome"), "Grupo Pedra - Unidade Buriti (Ituverava-SP); Grupo Pedra - Unidade Aroeira (Tupaciguara-MG)", "grupo colado nomes limpos")
+    assert_equal(collapsed_group["imoveis"][1]["principais_culturas"], "Cana-de-Acucar, Soja e Amendoim", "grupo colado culturas segunda unidade")
+    assert_equal(collapsed_group.get("area_total_ha"), 3232.35, "grupo colado area consolidada")
+
+    detail = parse_report_data(DETAIL_PROPERTY_TEXT)
+    assert_equal(detail.get("area_total_ha"), 329.32, "detalhamento preserva area consolidada")
+    assert_equal(detail["imoveis"][0]["area_total_ha"], 242.19, "detalhamento primeira unidade")
+    assert_equal(detail["imoveis"][1]["area_cultivo_ha"], 26.13, "detalhamento calcula cultivo segunda unidade")
 
     photo_output = generate_report(
         CASES[0]["source"].read_text(encoding="utf-8"),
