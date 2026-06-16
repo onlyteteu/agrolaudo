@@ -70,6 +70,23 @@ CASES = [
 ]
 
 
+MULTIPLE_PROPERTY_TEXT = """
+1. DISCRIMINACAO
+Nomes das propriedades: Fazenda Boa Vista; Fazenda Santa Luzia
+Area Total (ha): 120,50 ha
+Area de Pastagens (ha): 80,00 ha
+Area de Cultivo (ha): 40,50 ha
+Atividade principal desenvolvida: Pecuaria de corte
+Principais culturas: Pastagens
+2. TIPO (Benfeitorias e Infraestrutura)
+O produtor possui as fazendas Fazenda Boa Vista e Fazenda Santa Luzia localizadas no mesmo municipio.
+OUTROS COMENTARIOS
+As areas sao conduzidas de forma integrada.
+CONCLUSAO
+Atividade regular.
+"""
+
+
 def assert_equal(actual, expected, label: str) -> None:
     if isinstance(expected, float):
         if round(float(actual), 2) != round(expected, 2):
@@ -83,6 +100,40 @@ def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     for raw, expected in {"29,04 ha": 29.04, "29.04": 29.04, "1.234,56": 1234.56}.items():
         assert_equal(parse_decimal_pt(raw), expected, f"conversão numérica {raw}")
+
+    multiple = parse_report_data(MULTIPLE_PROPERTY_TEXT)
+    expected_properties = [{"nome": "Fazenda Boa Vista"}, {"nome": "Fazenda Santa Luzia"}]
+    assert_equal(multiple.get("imovel_nome"), "Fazenda Boa Vista; Fazenda Santa Luzia", "multiplas propriedades campo imovel")
+    assert_equal(multiple.get("imoveis"), expected_properties, "multiplas propriedades lista")
+
+    multiple_output = generate_report(MULTIPLE_PROPERTY_TEXT, output_path=OUTPUT_DIR / "multiplas-propriedades.xlsx")
+    multiple_worksheet = load_workbook(multiple_output).active
+    assert_equal(multiple_worksheet["A18"].value, "Fazenda Boa Vista; Fazenda Santa Luzia", "multiplas propriedades celula A18")
+
+    phrase = parse_report_data("O produtor explora as fazendas Fazenda Primavera e Fazenda Santa Clara localizadas em Morrinhos-GO.")
+    assert_equal(phrase.get("imoveis"), [{"nome": "Fazenda Primavera"}, {"nome": "Fazenda Santa Clara"}], "multiplas propriedades em frase")
+
+    from_json = parse_report_data({"imoveis": [{"nome": "Fazenda Modelo"}, {"nome": "Sitio Dois Irmaos"}]})
+    assert_equal(from_json.get("imovel_nome"), "Fazenda Modelo; Sitio Dois Irmaos", "multiplas propriedades em JSON")
+
+    photo_output = generate_report(
+        CASES[0]["source"].read_text(encoding="utf-8"),
+        sorted((ROOT / "sample_photos").glob("*.jpg")),
+        OUTPUT_DIR / "fotos-com-moldura.xlsx",
+    )
+    photo_worksheet = load_workbook(photo_output).active
+    report_photo_rows = [
+        int(image.anchor._from.row) + 1
+        for image in photo_worksheet._images
+        if getattr(getattr(image, "anchor", None), "_from", None) is not None and int(image.anchor._from.row) + 1 >= 200
+    ]
+    assert_equal(report_photo_rows, [210, 229, 248], "posicao das fotos inseridas")
+    assert_equal(photo_worksheet["D209"].value, "Foto 01", "legenda primeira foto")
+    assert_equal(photo_worksheet["D228"].value, "Foto 02", "legenda segunda foto")
+    assert_equal(photo_worksheet["D209"].border.top.style, "medium", "borda superior primeira foto")
+    assert_equal(photo_worksheet["D209"].border.left.style, "medium", "borda esquerda primeira foto")
+    assert_equal(photo_worksheet["J226"].border.right.style, "medium", "borda direita primeira foto")
+    assert_equal(photo_worksheet["J226"].border.bottom.style, "medium", "borda inferior primeira foto")
 
     for case in CASES:
         text = case["source"].read_text(encoding="utf-8")

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from openpyxl import load_workbook
-from openpyxl.styles import Alignment, Font
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.drawing.image import Image as ExcelImage
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
 from openpyxl.worksheet.worksheet import Worksheet
@@ -35,6 +35,8 @@ from .field_mapping import (
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_TEMPLATE = ROOT_DIR / "templates" / "relatorio-modelo.xlsx"
 DEFAULT_OUTPUT_DIR = ROOT_DIR / "outputs"
+PHOTO_CAPTION_FILL = PatternFill("solid", fgColor="E7F1E8")
+PHOTO_FRAME_SIDE = Side(style="medium", color="5A6F5B")
 
 
 def normalize_key(value: str) -> str:
@@ -98,7 +100,7 @@ def parse_narrative_report(text: str) -> dict[str, Any]:
         "cpf_cnpj": r"CPF/CNPJ|CNPJ/CPF|CPF|CNPJ",
         "cidade_uf": r"Município/UF|Municipio/UF|Município|Municipio|Cidade/UF|Cidade",
         "localizacao_1": r"Localização|Localizacao|Endereço/localização|Endereco/localizacao",
-        "imovel_nome": r"Nome da propriedade",
+        "imovel_nome": r"Nome da propriedade|Nome das propriedades|Nomes das propriedades",
         "tipo_exploracao": r"Tipo de exploração|Tipo de exploracao",
         "atividades_desenvolvidas": r"Atividades desenvolvidas",
         "situacao_produtiva": r"Situação produtiva|Situacao produtiva",
@@ -123,6 +125,14 @@ def parse_narrative_report(text: str) -> dict[str, Any]:
         value = extract_after_label(compact, label_pattern, stop_pattern)
         if value:
             data[field] = value
+
+    property_names = extract_property_names(compact, data.get("imovel_nome"), stop_pattern)
+    if property_names:
+        if len(property_names) > 1:
+            data["imoveis"] = [{"nome": name} for name in property_names]
+            data["imovel_nome"] = format_property_names(property_names)
+        elif not data.get("imovel_nome"):
+            data["imovel_nome"] = property_names[0]
 
     for area_field in ("area_total_ha", "area_pastagens_ha", "area_cultivo_ha"):
         if data.get(area_field):
@@ -305,6 +315,129 @@ def extract_rebanho(text: str) -> str | None:
     return None
 
 
+def extract_property_names(text: str, explicit_value: Any = None, stop_pattern: str | None = None) -> list[str]:
+    names = property_names_from_value(explicit_value)
+    patterns = [
+        r"(?:im[oó]veis?\s+rurais?|propriedades?|fazendas?|unidades?)\s+(?:denominad[oa]s?|chamad[oa]s?)\s+(.+?)(?=\s+(?:localizad|situad|compreend|abrang|totaliz|possu|no\s+municipio|na\s+regiao)\b|[.;]|$)",
+        r"(?:possui|det[eé]m|explora|administra|opera|trabalha)\s+(?:as?|os?)?\s*(?:im[oó]veis?\s+rurais?|propriedades?|fazendas?)\s+(.+?)(?=\s+(?:localizad|situad|compreend|abrang|totaliz|no\s+municipio|na\s+regiao)\b|[.;]|$)",
+    ]
+    if stop_pattern:
+        value = extract_after_label(
+            text,
+            r"Nome(?:s)?\s+d(?:a|as)\s+propriedade(?:s)?|Propriedade(?:s)?|Fazenda(?:s)?|Im[oó]ve(?:l|is)(?:\s+rurais?)?",
+            stop_pattern,
+        )
+        names.extend(split_property_names(value))
+
+    for pattern in patterns:
+        for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+            names.extend(split_property_names(match.group(1)))
+
+    return dedupe_property_names(names)
+
+
+def property_names_from_value(value: Any) -> list[str]:
+    if value in (None, ""):
+        return []
+    if isinstance(value, list):
+        names: list[str] = []
+        for item in value:
+            if isinstance(item, dict):
+                names.extend(split_property_names(item.get("nome", item.get("name", ""))))
+            else:
+                names.extend(split_property_names(item))
+        return names
+    return split_property_names(value)
+
+
+def split_property_names(value: Any) -> list[str]:
+    if value in (None, ""):
+        return []
+
+    raw = normalize_spaces(str(value))
+    if not raw:
+        return []
+
+    parts: list[str] = []
+    for chunk in split_outside_parentheses(raw, ";,/\n"):
+        parts.extend(split_conjunction_property_names(chunk))
+
+    return [name for name in (clean_property_name(part) for part in parts) if looks_like_property_name(name)]
+
+
+def split_outside_parentheses(value: str, separators: str) -> list[str]:
+    parts: list[str] = []
+    current: list[str] = []
+    depth = 0
+    for char in value:
+        if char == "(":
+            depth += 1
+        elif char == ")" and depth:
+            depth -= 1
+        if char in separators and depth == 0:
+            part = "".join(current).strip()
+            if part:
+                parts.append(part)
+            current = []
+            continue
+        current.append(char)
+    part = "".join(current).strip()
+    if part:
+        parts.append(part)
+    return parts
+
+
+def split_conjunction_property_names(value: str) -> list[str]:
+    pieces = re.split(r"\s+e\s+(?=(?:Fazenda|Sitio|S[ií]tio|Chacara|Ch[aá]cara|Estancia|Est[aâ]ncia|Rancho|Gleba|Granja|Retiro|Lote|Im[oó]vel|Propriedade)\b)", value, flags=re.IGNORECASE)
+    if len(pieces) > 1:
+        return pieces
+
+    if re.search(r"\b(Fazenda|Sitio|S[ií]tio|Chacara|Ch[aá]cara|Estancia|Est[aâ]ncia|Rancho|Gleba|Granja|Retiro)\b", value, flags=re.IGNORECASE):
+        implicit = re.split(r"\s+e\s+", value, flags=re.IGNORECASE)
+        if len(implicit) > 1:
+            prefix_match = re.match(r"\s*(Fazenda|Sitio|S[ií]tio|Chacara|Ch[aá]cara|Estancia|Est[aâ]ncia|Rancho|Gleba|Granja|Retiro)\b", implicit[0], flags=re.IGNORECASE)
+            if prefix_match:
+                prefix = prefix_match.group(1)
+                return [implicit[0], *[part if starts_with_property_type(part) else f"{prefix} {part}" for part in implicit[1:]]]
+
+    return [value]
+
+
+def clean_property_name(value: str) -> str:
+    cleaned = clean_text_value(value)
+    cleaned = re.sub(r"^(?:as?|os?|das?|dos?|e|seguintes?)\s+", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s+(?:localizad[oa]s?|situad[oa]s?|compreend(?:e|em)|abrang(?:e|em)|totaliz(?:a|am)|possu(?:i|em))\b.*$", "", cleaned, flags=re.IGNORECASE)
+    return cleaned.strip(" .;:-")
+
+
+def looks_like_property_name(value: str) -> bool:
+    if not value:
+        return False
+    normalized = normalize_key(value)
+    property_terms = {"fazenda", "sitio", "chacara", "estancia", "rancho", "gleba", "granja", "retiro", "lote", "imovel", "propriedade"}
+    return any(term in normalized.split("_") for term in property_terms)
+
+
+def starts_with_property_type(value: str) -> bool:
+    return bool(re.match(r"\s*(Fazenda|Sitio|S[ií]tio|Chacara|Ch[aá]cara|Estancia|Est[aâ]ncia|Rancho|Gleba|Granja|Retiro|Lote|Im[oó]vel|Propriedade)\b", value, flags=re.IGNORECASE))
+
+
+def dedupe_property_names(names: list[str]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for name in names:
+        key = normalize_key(name)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(name)
+    return deduped
+
+
+def format_property_names(names: list[str]) -> str:
+    return "; ".join(name for name in names if str(name).strip())
+
+
 def parse_equipment_section(section: str) -> list[dict[str, Any]]:
     if re.search(
         r"não dispõe|nao dispoe|não informado|nao informado|não detalhou|nao detalhou",
@@ -356,6 +489,16 @@ def normalize_data(data: dict[str, Any]) -> dict[str, Any]:
             normalized[normalized_key] = value
         else:
             normalized[normalized_key] = value
+
+    property_names = property_names_from_value(normalized.get("imoveis"))
+    if property_names:
+        normalized["imoveis"] = [{"nome": name} for name in property_names]
+        normalized.setdefault("imovel_nome", format_property_names(property_names))
+    else:
+        property_names = property_names_from_value(normalized.get("imovel_nome"))
+        if len(property_names) > 1:
+            normalized["imoveis"] = [{"nome": name} for name in property_names]
+            normalized["imovel_nome"] = format_property_names(property_names)
 
     return normalized
 
@@ -472,7 +615,8 @@ def build_client_block(data: dict[str, Any]) -> str | None:
 
 
 def build_property_line(data: dict[str, Any]) -> str | None:
-    name = data.get("imovel_nome")
+    property_names = property_names_from_value(data.get("imoveis"))
+    name = format_property_names(property_names) if property_names else data.get("imovel_nome")
     if not name:
         return None
 
@@ -679,23 +823,78 @@ def adjust_dynamic_row_heights(worksheet: Worksheet) -> None:
 
 def apply_photos(worksheet: Worksheet, photo_paths: list[str | Path], image_output_dir: Path) -> None:
     valid_photos = [Path(path) for path in photo_paths if Path(path).exists()]
+    remove_old_report_photos(worksheet)
+    clear_photo_slots(worksheet)
     if not valid_photos:
-        remove_old_report_photos(worksheet)
         return
 
     image_output_dir.mkdir(parents=True, exist_ok=True)
-    remove_old_report_photos(worksheet)
 
     for index, photo_path in enumerate(valid_photos[: len(PHOTO_ANCHORS)]):
+        from_row, from_col, to_row, to_col = PHOTO_ANCHORS[index]
+        format_photo_slot(worksheet, index + 1, from_row, from_col, to_row, to_col)
+
         prepared_path = prepare_photo(photo_path, image_output_dir, index + 1)
         image = ExcelImage(str(prepared_path))
-        from_row, from_col, to_row, to_col = PHOTO_ANCHORS[index]
+        image_start_row = from_row + 1 if from_row + 1 < to_row else from_row
         image.anchor = TwoCellAnchor(
             editAs="twoCell",
-            _from=AnchorMarker(row=from_row, col=from_col),
+            _from=AnchorMarker(row=image_start_row, col=from_col),
             to=AnchorMarker(row=to_row, col=to_col),
         )
         worksheet.add_image(image)
+
+
+def clear_photo_slots(worksheet: Worksheet) -> None:
+    for from_row, from_col, to_row, to_col in PHOTO_ANCHORS:
+        for row in range(from_row + 1, to_row + 2):
+            for col in range(from_col + 1, to_col + 2):
+                cell = worksheet.cell(row=row, column=col)
+                cell.border = Border()
+                cell.fill = PatternFill(fill_type=None)
+
+        caption_cell = worksheet.cell(row=from_row + 1, column=from_col + 1)
+        if isinstance(caption_cell.value, str) and re.fullmatch(r"Foto\s+\d{2}", caption_cell.value.strip(), flags=re.IGNORECASE):
+            caption_cell.value = None
+
+
+def format_photo_slot(worksheet: Worksheet, number: int, from_row: int, from_col: int, to_row: int, to_col: int) -> None:
+    start_row = from_row + 1
+    end_row = to_row + 1
+    start_col = from_col + 1
+    end_col = to_col + 1
+
+    caption_cell = worksheet.cell(row=start_row, column=start_col)
+    caption_cell.value = f"Foto {number:02d}"
+    caption_cell.font = copy(caption_cell.font)
+    caption_cell.font = Font(
+        name=caption_cell.font.name,
+        size=caption_cell.font.sz or 10,
+        bold=True,
+        italic=caption_cell.font.italic,
+        color="173B2C",
+        underline=caption_cell.font.underline,
+    )
+    caption_cell.alignment = Alignment(horizontal="left", vertical="center")
+    worksheet.row_dimensions[start_row].height = max(18, worksheet.row_dimensions[start_row].height or 0)
+
+    for col in range(start_col, end_col + 1):
+        worksheet.cell(row=start_row, column=col).fill = copy(PHOTO_CAPTION_FILL)
+
+    apply_range_border(worksheet, start_row, start_col, end_row, end_col)
+
+
+def apply_range_border(worksheet: Worksheet, start_row: int, start_col: int, end_row: int, end_col: int) -> None:
+    for row in range(start_row, end_row + 1):
+        for col in range(start_col, end_col + 1):
+            cell = worksheet.cell(row=row, column=col)
+            current = copy(cell.border)
+            cell.border = Border(
+                left=PHOTO_FRAME_SIDE if col == start_col else current.left,
+                right=PHOTO_FRAME_SIDE if col == end_col else current.right,
+                top=PHOTO_FRAME_SIDE if row == start_row else current.top,
+                bottom=PHOTO_FRAME_SIDE if row == end_row else current.bottom,
+            )
 
 
 def remove_old_report_photos(worksheet: Worksheet) -> None:

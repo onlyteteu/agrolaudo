@@ -22,7 +22,7 @@ REVIEW_FIELDS = [
     {"key": "data_visita", "label": "Data da visita", "required": False, "type": "text"},
     {"key": "cpf_cnpj", "label": "CPF/CNPJ", "required": False, "type": "text"},
     {"key": "localizacao_1", "label": "Município / localização", "required": True, "type": "text"},
-    {"key": "imovel_nome", "label": "Propriedade", "required": True, "type": "text"},
+    {"key": "imovel_nome", "label": "Propriedade(s)", "required": True, "type": "text"},
     {"key": "area_total_ha", "label": "Área total (ha)", "required": True, "type": "number"},
     {"key": "area_pastagens_ha", "label": "Pastagens (ha)", "required": False, "type": "number"},
     {"key": "area_cultivo_ha", "label": "Cultivo (ha)", "required": False, "type": "number"},
@@ -976,8 +976,10 @@ def main() -> None:
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     port = int(os.environ.get("PORT", "8000"))
-    server = ThreadingHTTPServer(("127.0.0.1", port), ReportHandler)
-    print(f"Servidor rodando em http://127.0.0.1:{port}")
+    host = os.environ.get("HOST", "127.0.0.1")
+    server = ThreadingHTTPServer((host, port), ReportHandler)
+    display_host = "127.0.0.1" if host == "0.0.0.0" else host
+    print(f"Servidor rodando em http://{display_host}:{port}")
     server.serve_forever()
 
 
