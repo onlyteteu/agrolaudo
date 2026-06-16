@@ -211,6 +211,32 @@ DETAIL_PROPERTY_TEXT = (
 )
 
 
+BENFEITORIA_SPLIT_TEXT = (
+    "1. DISCRIMINACAONome da propriedade: Complexo Agropecuario Sandro Mabel "
+    "(Fazendas: Boa Sorte e Sao Judas)"
+    "Dados de Area e Exploracao por Propriedade:"
+    "Fazenda Boa Sorte"
+    "Area Total (ha): 100,00 ha"
+    "Area de Pastagens (ha): 70,00 ha"
+    "Area de Cultivo (ha): 30,00 ha"
+    "Atividade principal desenvolvida: Pecuaria de corte"
+    "Principais culturas: Pastagens"
+    "Fazenda Sao Judas"
+    "Area Total (ha): 200,00 ha"
+    "Area de Pastagens (ha): 140,00 ha"
+    "Area de Cultivo (ha): 60,00 ha"
+    "Atividade principal desenvolvida: Pecuaria de corte"
+    "Principais culturas: Pastagens"
+    "2. TIPO (Benfeitorias e Infraestrutura)"
+    "O complexo pecuario gerido pelo produtor Sandro Mabel em Sao Miguel do Araguaia-GO "
+    "possui infraestrutura geral integrada."
+    "Na Fazenda Boa Sorte, ha 60 pastos com cochos cobertos e bebedouros automatizados."
+    "Na Fazenda Sao Judas, o rebanho e manejado em pastagens de Andropogon."
+    "INVESTIMENTOS EM ANDAMENTO (Comentarios)"
+    "Sem investimentos relevantes."
+)
+
+
 def assert_equal(actual, expected, label: str) -> None:
     if isinstance(expected, float):
         if round(float(actual), 2) != round(expected, 2):
@@ -274,6 +300,15 @@ def main() -> None:
     assert_equal(detail.get("area_total_ha"), 329.32, "detalhamento preserva area consolidada")
     assert_equal(detail["imoveis"][0]["area_total_ha"], 242.19, "detalhamento primeira unidade")
     assert_equal(detail["imoveis"][1]["area_cultivo_ha"], 26.13, "detalhamento calcula cultivo segunda unidade")
+
+    benfeitoria_split = parse_report_data(BENFEITORIA_SPLIT_TEXT)
+    assert_equal(benfeitoria_split.get("cliente"), "Sandro Mabel", "nome do cliente extraido de paragrafo tecnico")
+    benfeitoria_output = generate_report(BENFEITORIA_SPLIT_TEXT, output_path=OUTPUT_DIR / "benfeitorias-em-caixas.xlsx")
+    benfeitoria_worksheet = load_workbook(benfeitoria_output).active
+    assert_equal(benfeitoria_worksheet["B4"].value, "Sandro Mabel", "cliente escrito somente como nome")
+    assert_equal(benfeitoria_worksheet["A27"].value.startswith("O complexo pecuario"), True, "benfeitorias bloco introdutorio")
+    assert_equal(benfeitoria_worksheet["A30"].value.startswith("Na Fazenda Boa Sorte"), True, "benfeitorias primeira fazenda")
+    assert_equal(benfeitoria_worksheet["A32"].value.startswith("Na Fazenda Sao Judas"), True, "benfeitorias segunda fazenda")
 
     photo_output = generate_report(
         CASES[0]["source"].read_text(encoding="utf-8"),

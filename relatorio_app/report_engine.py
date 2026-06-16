@@ -43,6 +43,13 @@ PROPERTY_TEMPLATE_END_ROW = 21
 PROPERTY_INSERT_AT_ROW = 22
 PROPERTY_SHIFT_START_ROW = 23
 PROPERTY_BASE_CAPACITY = PROPERTY_TEMPLATE_END_ROW - PROPERTY_START_ROW + 1
+BENFEITORIA_BASE_BLOCKS = [(27, 29), (30, 31), (32, 33)]
+BENFEITORIA_INSERT_AT_ROW = 34
+BENFEITORIA_EXTRA_BLOCK_HEIGHT = 3
+BENFEITORIA_SIDE = Side(style="thin", color="000000")
+CLIENT_NAME_WORD = r"[A-ZÀ-Ú][A-Za-zÀ-ÿ0-9&.'’-]+"
+CLIENT_NAME_PARTICLE = r"(?:d[aeo]s?|e)"
+CLIENT_NAME_PATTERN = rf"{CLIENT_NAME_WORD}(?:\s+(?:{CLIENT_NAME_PARTICLE}|{CLIENT_NAME_WORD})){{0,7}}"
 
 
 def normalize_key(value: str) -> str:
@@ -132,9 +139,12 @@ def parse_narrative_report(text: str) -> dict[str, Any]:
         if value:
             data[field] = value
 
+    explicit_property_summary = data.get("imovel_nome")
     structured_properties = parse_property_area_sections(text)
     if structured_properties:
         data["imoveis"] = structured_properties
+        if explicit_property_summary:
+            data["imovel_resumo"] = explicit_property_summary
         data["imovel_nome"] = format_property_names([str(item["nome"]) for item in structured_properties if item.get("nome")])
         totals = aggregate_property_totals(structured_properties)
         detail_only = all(
@@ -234,12 +244,14 @@ def parse_narrative_report(text: str) -> dict[str, Any]:
         data["area_alqueires"] = area_alqueires
 
     client = extract_client_name(compact)
-    if client:
+    if client and not data.get("cliente"):
         data["cliente"] = client
 
     rebanho = extract_rebanho(compact)
     if rebanho:
         data["rebanho"] = rebanho
+
+    enrich_location_summary(data)
 
     return data
 
@@ -320,14 +332,70 @@ def extract_area_alqueires(text: str) -> str | None:
 
 
 def extract_client_name(text: str) -> str | None:
-    match = re.search(
-        r"produtor(?:a)?\s+(.+?)(?=\s+(?:está|esta|desenvolve|conduz|localizad[oa]|mantém|mantem)\b)",
-        text,
-        flags=re.IGNORECASE,
-    )
-    if not match:
+    patterns = [
+        rf"\b(?i:produtor(?:a)?(?:\s+rural)?)\s+({CLIENT_NAME_PATTERN})(?=\s+(?i:em|no|na|est[aá]|desenvolve|conduz|comanda|consolida|det[eé]m|mant[eé]m|mantem|possui|opera|localizad[oa])\b|[,.;]|$)",
+        rf"\b(?i:mutu[aá]rio(?:a)?)\s+({CLIENT_NAME_PATTERN})(?=\s+(?i:em|no|na|est[aá]|desenvolve|conduz|comanda|consolida|det[eé]m|mant[eé]m|mantem|possui|opera|localizad[oa])\b|[,.;]|$)",
+        rf"\b(?i:cliente)\s+({CLIENT_NAME_PATTERN})(?=\s+(?i:em|no|na|est[aá]|desenvolve|conduz|comanda|consolida|det[eé]m|mant[eé]m|mantem|possui|opera|localizad[oa])\b|[,.;]|$)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            candidate = sanitize_client_name(match.group(1))
+            if candidate:
+                return candidate
+    return sanitize_client_name(text)
+
+
+def sanitize_client_name(value: Any) -> str | None:
+    if value in (None, ""):
         return None
-    return clean_text_value(match.group(1))
+    text = normalize_spaces(str(value))
+    if not text:
+        return None
+
+    direct_match = re.match(
+        rf"^({CLIENT_NAME_PATTERN})(?=\s+(?i:em|no|na|est[aá]|desenvolve|conduz|comanda|consolida|det[eé]m|mant[eé]m|mantem|possui|opera|localizad[oa])\b|[,.;]|$)",
+        text,
+    )
+    candidate = direct_match.group(1) if direct_match else text
+    candidate = clean_text_value(candidate)
+    candidate = re.sub(r"\s+(?:CPF|CNPJ)\b.*$", "", candidate, flags=re.IGNORECASE).strip()
+    candidate = candidate.strip(" -;,.")
+
+    if not looks_like_client_name(candidate):
+        return None
+    return candidate
+
+
+def looks_like_client_name(value: str) -> bool:
+    text = normalize_spaces(value)
+    if not text or len(text) > 80:
+        return False
+    words = text.split()
+    if len(words) > 8:
+        return False
+    rejected_terms = {
+        "fazenda",
+        "sitio",
+        "chacara",
+        "propriedade",
+        "imovel",
+        "municipio",
+        "hectare",
+        "hectares",
+        "pecuaria",
+        "agricola",
+        "operacao",
+        "infraestrutura",
+        "benfeitoria",
+        "pastagem",
+        "pastagens",
+        "plantel",
+        "cabecas",
+        "complexo",
+    }
+    normalized = normalize_key(text)
+    return not any(term in normalized for term in rejected_terms)
 
 
 def extract_rebanho(text: str) -> str | None:
@@ -693,6 +761,13 @@ def normalize_data(data: dict[str, Any]) -> dict[str, Any]:
         else:
             normalized[normalized_key] = value
 
+    if normalized.get("cliente"):
+        cleaned_client = sanitize_client_name(normalized.get("cliente"))
+        if cleaned_client:
+            normalized["cliente"] = cleaned_client
+        elif len(str(normalized["cliente"])) > 80:
+            normalized.pop("cliente", None)
+
     property_items = normalize_property_items(normalized.get("imoveis"))
     property_names = property_names_from_value(property_items)
     if property_items:
@@ -756,14 +831,18 @@ def generate_report(
 
     row_offset = prepare_property_rows(worksheet, data)
     clear_variable_model_values(worksheet, row_offset)
-    apply_fields(worksheet, data, row_offset)
+    benfeitoria_blocks = split_benfeitoria_blocks(data.get("benfeitorias_descricao"))
+    benfeitoria_offset = prepare_benfeitoria_rows(worksheet, benfeitoria_blocks, row_offset)
+    below_benfeitoria_offset = row_offset + benfeitoria_offset
+    apply_fields(worksheet, data, row_offset, below_benfeitoria_offset)
+    apply_benfeitoria_blocks(worksheet, data, benfeitoria_blocks, row_offset)
     apply_property_rows(worksheet, data)
-    apply_equipment(worksheet, data.get("equipamentos", []), row_offset)
-    apply_insumos(worksheet, data.get("insumos", {}), row_offset)
-    apply_perspectivas(worksheet, data.get("perspectivas", {}), row_offset)
-    polish_written_ranges(worksheet, row_offset)
+    apply_equipment(worksheet, data.get("equipamentos", []), below_benfeitoria_offset)
+    apply_insumos(worksheet, data.get("insumos", {}), below_benfeitoria_offset)
+    apply_perspectivas(worksheet, data.get("perspectivas", {}), below_benfeitoria_offset)
+    polish_written_ranges(worksheet, row_offset, below_benfeitoria_offset)
     adjust_dynamic_row_heights(worksheet)
-    apply_photos(worksheet, photo_paths or [], output.parent / f"{output.stem}-images", row_offset)
+    apply_photos(worksheet, photo_paths or [], output.parent / f"{output.stem}-images", below_benfeitoria_offset)
 
     workbook.save(output)
     return output
@@ -782,6 +861,51 @@ def prepare_property_rows(worksheet: Worksheet, data: dict[str, Any]) -> int:
     for row in range(PROPERTY_INSERT_AT_ROW, PROPERTY_INSERT_AT_ROW + extra_rows):
         copy_row_style(worksheet, PROPERTY_TEMPLATE_END_ROW, row)
         merge_property_row(worksheet, row)
+    return extra_rows
+
+
+def split_benfeitoria_blocks(value: Any) -> list[str]:
+    if value in (None, ""):
+        return []
+
+    text = normalize_spaces(str(value))
+    if not text:
+        return []
+
+    start_pattern = r"\b(?:Na|No)\s+(?:Fazenda|Unidade|Grupo|S[ií]tio|Ch[aá]cara)\b"
+    matches = list(re.finditer(start_pattern, text))
+    if not matches:
+        return [text]
+
+    blocks: list[str] = []
+    intro = text[: matches[0].start()].strip()
+    if intro:
+        blocks.append(intro)
+
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        block = text[match.start() : end].strip()
+        if block:
+            blocks.append(block)
+    return blocks
+
+
+def prepare_benfeitoria_rows(worksheet: Worksheet, blocks: list[str], property_offset: int = 0) -> int:
+    extra_blocks = max(0, len(blocks) - len(BENFEITORIA_BASE_BLOCKS))
+    extra_rows = extra_blocks * BENFEITORIA_EXTRA_BLOCK_HEIGHT
+    if not extra_rows:
+        return 0
+
+    insert_at = BENFEITORIA_INSERT_AT_ROW + property_offset
+    shifted_merges = collect_shifted_merged_ranges(worksheet, insert_at, extra_rows)
+    worksheet.insert_rows(insert_at, extra_rows)
+    for merge_range in shifted_merges:
+        worksheet.merge_cells(merge_range)
+
+    source_rows = [BENFEITORIA_BASE_BLOCKS[-1][0] + property_offset, BENFEITORIA_BASE_BLOCKS[-1][1] + property_offset]
+    for index, row in enumerate(range(insert_at, insert_at + extra_rows)):
+        copy_row_style(worksheet, source_rows[index % len(source_rows)], row)
+        worksheet.row_dimensions[row].height = 24
     return extra_rows
 
 
@@ -882,6 +1006,18 @@ def shifted_coordinate(coordinate: str, row_offset: int, start_row: int = PROPER
     return f"{col}{row}"
 
 
+def coordinate_row(coordinate: str) -> int | None:
+    match = re.fullmatch(r"[A-Z]+(\d+)", coordinate)
+    return int(match.group(1)) if match else None
+
+
+def offset_for_coordinate(coordinate: str, row_offset: int, below_benfeitoria_offset: int) -> int:
+    row = coordinate_row(coordinate)
+    if row is not None and row >= BENFEITORIA_INSERT_AT_ROW:
+        return below_benfeitoria_offset
+    return row_offset
+
+
 def shifted_row(row: int, row_offset: int, start_row: int = PROPERTY_SHIFT_START_ROW) -> int:
     return row + row_offset if row >= start_row else row
 
@@ -890,7 +1026,7 @@ def clear_variable_model_values(worksheet: Worksheet, row_offset: int = 0) -> No
     for cell in ["B4", *FIELD_TO_CELL.values(), *(cell for cell, _ in DATE_FIELDS.values())]:
         set_cell(worksheet, shifted_coordinate(cell, row_offset), None)
 
-    for cell in ["A27", "F27", "G27", "H27", "I27", "F30", "G30", "H30", "I30", "F32", "G32", "H32", "I32"]:
+    for cell in ["A27", "A30", "A32", "A33", "F27", "G27", "H27", "I27", "F30", "G30", "H30", "I30", "F32", "G32", "H32", "I32"]:
         set_cell(worksheet, shifted_coordinate(cell, row_offset), None)
 
     clear_equipment_rows(worksheet, row_offset)
@@ -899,7 +1035,103 @@ def clear_variable_model_values(worksheet: Worksheet, row_offset: int = 0) -> No
     clear_legacy_option_marks(worksheet, row_offset)
 
 
-def apply_fields(worksheet: Worksheet, data: dict[str, Any], row_offset: int = 0) -> None:
+def apply_benfeitoria_blocks(worksheet: Worksheet, data: dict[str, Any], blocks: list[str], property_offset: int = 0) -> None:
+    block_count = max(len(BENFEITORIA_BASE_BLOCKS), len(blocks))
+    clear_benfeitoria_blocks(worksheet, block_count, property_offset)
+
+    conservacao = normalize_key(str(data.get("benfeitorias_conservacao", "")))
+    observacoes = data.get("benfeitorias_observacoes")
+    for index in range(block_count):
+        start_row, end_row = benfeitoria_block_rows(index, property_offset)
+        format_benfeitoria_block(worksheet, start_row, end_row)
+        has_text = index < len(blocks)
+        if has_text:
+            set_cell(worksheet, f"A{start_row}", blocks[index])
+            style_benfeitoria_text_cell(worksheet, f"A{start_row}")
+        if has_text and conservacao:
+            set_mark(worksheet, f"F{start_row}", conservacao.startswith("bom"))
+            set_mark(worksheet, f"G{start_row}", conservacao.startswith("regular"))
+            set_mark(worksheet, f"H{start_row}", conservacao.startswith("ruim"))
+        if has_text and observacoes not in (None, ""):
+            set_cell(worksheet, f"I{start_row}", observacoes)
+            style_benfeitoria_text_cell(worksheet, f"I{start_row}")
+        adjust_benfeitoria_row_heights(worksheet, start_row, end_row, blocks[index] if index < len(blocks) else "")
+
+
+def clear_benfeitoria_blocks(worksheet: Worksheet, block_count: int, property_offset: int = 0) -> None:
+    for index in range(block_count):
+        start_row, end_row = benfeitoria_block_rows(index, property_offset)
+        unmerge_intersecting_range(worksheet, start_row, 1, end_row, 11)
+        for row in range(start_row, end_row + 1):
+            for col in range(1, 12):
+                worksheet.cell(row=row, column=col).value = None
+
+
+def benfeitoria_block_rows(index: int, property_offset: int = 0) -> tuple[int, int]:
+    if index < len(BENFEITORIA_BASE_BLOCKS):
+        start, end = BENFEITORIA_BASE_BLOCKS[index]
+        return start + property_offset, end + property_offset
+
+    extra_index = index - len(BENFEITORIA_BASE_BLOCKS)
+    start = BENFEITORIA_INSERT_AT_ROW + property_offset + extra_index * BENFEITORIA_EXTRA_BLOCK_HEIGHT
+    return start, start + BENFEITORIA_EXTRA_BLOCK_HEIGHT - 1
+
+
+def format_benfeitoria_block(worksheet: Worksheet, start_row: int, end_row: int) -> None:
+    unmerge_intersecting_range(worksheet, start_row, 1, end_row, 11)
+    for range_string in (
+        f"A{start_row}:E{end_row}",
+        f"F{start_row}:F{end_row}",
+        f"G{start_row}:G{end_row}",
+        f"H{start_row}:H{end_row}",
+        f"I{start_row}:K{end_row}",
+    ):
+        worksheet.merge_cells(range_string)
+    apply_simple_range_border(worksheet, start_row, 1, end_row, 11)
+
+
+def unmerge_intersecting_range(worksheet: Worksheet, start_row: int, start_col: int, end_row: int, end_col: int) -> None:
+    for merged_range in list(worksheet.merged_cells.ranges):
+        min_col, min_row, max_col, max_row = range_boundaries(str(merged_range))
+        if max_row < start_row or min_row > end_row or max_col < start_col or min_col > end_col:
+            continue
+        worksheet.unmerge_cells(str(merged_range))
+
+
+def apply_simple_range_border(worksheet: Worksheet, start_row: int, start_col: int, end_row: int, end_col: int) -> None:
+    for row in range(start_row, end_row + 1):
+        for col in range(start_col, end_col + 1):
+            cell = worksheet.cell(row=row, column=col)
+            current = copy(cell.border)
+            cell.border = Border(
+                left=BENFEITORIA_SIDE if col == start_col else current.left,
+                right=BENFEITORIA_SIDE if col == end_col else current.right,
+                top=BENFEITORIA_SIDE if row == start_row else current.top,
+                bottom=BENFEITORIA_SIDE if row == end_row else current.bottom,
+            )
+
+
+def style_benfeitoria_text_cell(worksheet: Worksheet, coordinate: str) -> None:
+    target = top_left_for_merged_cell(worksheet, coordinate)
+    cell = worksheet[target]
+    cell.alignment = copy(cell.alignment)
+    cell.alignment = Alignment(
+        horizontal=cell.alignment.horizontal,
+        vertical="top",
+        wrap_text=True,
+    )
+
+
+def adjust_benfeitoria_row_heights(worksheet: Worksheet, start_row: int, end_row: int, text: str) -> None:
+    line_count = max(2, (len(text) // 95) + text.count("\n") + 1)
+    total_height = max(42, min(150, line_count * 15 + 12))
+    row_height = total_height / (end_row - start_row + 1)
+    for row in range(start_row, end_row + 1):
+        worksheet.row_dimensions[row].height = max(18, row_height)
+
+
+def apply_fields(worksheet: Worksheet, data: dict[str, Any], row_offset: int = 0, below_benfeitoria_offset: int | None = None) -> None:
+    below_benfeitoria_offset = row_offset if below_benfeitoria_offset is None else below_benfeitoria_offset
     client_block = build_client_block(data)
     if client_block:
         set_cell(worksheet, "B4", client_block)
@@ -920,57 +1152,31 @@ def apply_fields(worksheet: Worksheet, data: dict[str, Any], row_offset: int = 0
     for field, cell in FIELD_TO_CELL.items():
         if field in property_fields:
             continue
+        if field in {"benfeitorias_descricao", "benfeitorias_observacoes"}:
+            continue
         value = data.get(field)
         if value not in (None, ""):
-            set_cell(worksheet, shifted_coordinate(cell, row_offset), value)
+            offset = offset_for_coordinate(cell, row_offset, below_benfeitoria_offset)
+            set_cell(worksheet, shifted_coordinate(cell, offset), value)
 
     for field, (cell, pattern) in DATE_FIELDS.items():
         value = data.get(field)
         if value not in (None, ""):
-            set_cell(worksheet, shifted_coordinate(cell, row_offset), pattern.format(value))
-
-    conservacao = normalize_key(str(data.get("benfeitorias_conservacao", "")))
-    if conservacao:
-        set_mark(worksheet, shifted_coordinate("F27", row_offset), conservacao.startswith("bom"))
-        set_mark(worksheet, shifted_coordinate("G27", row_offset), conservacao.startswith("regular"))
-        set_mark(worksheet, shifted_coordinate("H27", row_offset), conservacao.startswith("ruim"))
+            offset = offset_for_coordinate(cell, row_offset, below_benfeitoria_offset)
+            set_cell(worksheet, shifted_coordinate(cell, offset), pattern.format(value))
 
     if data.get("raw_text") and not data.get("outros_comentarios"):
-        set_cell(worksheet, shifted_coordinate("B181", row_offset), data["raw_text"])
+        set_cell(worksheet, shifted_coordinate("B181", below_benfeitoria_offset), data["raw_text"])
 
 
 def build_client_block(data: dict[str, Any]) -> str | None:
     if data.get("resumo_cliente"):
         return str(data["resumo_cliente"])
 
-    lines: list[str] = []
-    for field in ("cliente", "cidade_uf"):
-        if data.get(field):
-            lines.append(str(data[field]))
+    if data.get("cliente"):
+        return str(data["cliente"]).strip() or None
 
-    property_line = build_property_line(data)
-    if property_line:
-        lines.extend(["", property_line])
-
-    activity_bits = []
-    if data.get("atividade_principal"):
-        activity_bits.append(str(data["atividade_principal"]))
-    if data.get("rebanho"):
-        activity_bits.append(str(data["rebanho"]))
-    if data.get("fase"):
-        activity_bits.append(str(data["fase"]))
-    if activity_bits:
-        lines.extend(["", " - ".join(activity_bits)])
-
-    projects = data.get("futuros_projetos")
-    if projects:
-        lines.extend(["", "Futuros projetos"])
-        if isinstance(projects, list):
-            lines.extend(str(item) for item in projects if str(item).strip())
-        else:
-            lines.append(str(projects))
-
-    return "\n".join(lines).strip() or None
+    return None
 
 
 def build_property_line(data: dict[str, Any]) -> str | None:
@@ -988,6 +1194,18 @@ def build_property_line(data: dict[str, Any]) -> str | None:
     if area_parts:
         return f"{name} - {' / '.join(area_parts)}"
     return str(name)
+
+
+def enrich_location_summary(data: dict[str, Any]) -> None:
+    city = data.get("cidade_uf")
+    location = data.get("localizacao_1")
+    property_name = data.get("imovel_resumo") or data.get("imovel_nome")
+    if not city or not property_name:
+        return
+    if location not in (None, "", city):
+        return
+
+    data["localizacao_1"] = f"{city} - {property_name}"
 
 
 def apply_equipment(worksheet: Worksheet, equipment: Any, row_offset: int = 0) -> None:
@@ -1143,7 +1361,8 @@ def clear_legacy_option_marks(worksheet: Worksheet, row_offset: int = 0) -> None
             worksheet[target].value = f"{prefix}: "
 
 
-def polish_written_ranges(worksheet: Worksheet, row_offset: int = 0) -> None:
+def polish_written_ranges(worksheet: Worksheet, row_offset: int = 0, below_benfeitoria_offset: int | None = None) -> None:
+    below_benfeitoria_offset = row_offset if below_benfeitoria_offset is None else below_benfeitoria_offset
     wrap_cells = [
         "B4",
         "C8",
@@ -1161,7 +1380,8 @@ def polish_written_ranges(worksheet: Worksheet, row_offset: int = 0) -> None:
         "B190",
     ]
     for coordinate in wrap_cells:
-        target = top_left_for_merged_cell(worksheet, shifted_coordinate(coordinate, row_offset))
+        offset = offset_for_coordinate(coordinate, row_offset, below_benfeitoria_offset)
+        target = top_left_for_merged_cell(worksheet, shifted_coordinate(coordinate, offset))
         cell = worksheet[target]
         cell.alignment = copy(cell.alignment)
         cell.alignment = Alignment(
