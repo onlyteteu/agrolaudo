@@ -1,0 +1,52 @@
+{
+  "cliente": "Joao da Silva",
+  "data_visita": "15/06/2026",
+  "data_assinatura": "15/06/2026",
+  "cpf_cnpj": "000.000.000-00",
+  "cidade_uf": "Anapolis-GO",
+  "localizacao_1": "Anapolis-GO",
+  "finalidade_vistoria": "VERIFICACAO IN-LOCO DE REAIS CONDICOES DE PRODUTIVIDADE DO CLIENTE EM QUESTAO;",
+  "comentario_localizacao": "VIA DE ACESSO EM BOAS CONDICOES DE TRAFEGO, COM BOA CONDICAO PARA ESCOAMENTO DA PRODUCAO.",
+  "imovel_nome": "Fazenda Boa Esperanca",
+  "area_total_ha": 120,
+  "area_pastagens_ha": 85,
+  "area_cultivo_ha": 35,
+  "atividade_principal": "Pecuaria de corte",
+  "principais_culturas": "Pastagens forrageiras destinadas ao pastejo de bovinos",
+  "rebanho": "180 cabecas Nelore",
+  "fase": "Recria",
+  "futuros_projetos": ["Reforma de pastagem", "Aquisicao de animais"],
+  "benfeitorias_descricao": "Propriedade com infraestrutura funcional para pecuaria de corte, contando com cercas, curral de manejo e areas de pastagem em utilizacao.",
+  "benfeitorias_conservacao": "BOM",
+  "benfeitorias_observacoes": "Estrutura compativel com a escala produtiva informada.",
+  "equipamentos": [
+    {
+      "descricao": "Trator agricola",
+      "fabricante": "John Deere",
+      "modelo": "5078E",
+      "estado": "BOM",
+      "financiado_bb": "NAO",
+      "financiado_outros": "NAO",
+      "segurado": "NAO",
+      "gravame": "NAO",
+      "outras_informacoes": "Uso proprio"
+    }
+  ],
+  "investimentos_comentarios": "Atividade pecuaria conduzida em area consolidada, com planejamento de melhoria de pastagens e ampliacao gradual do rebanho.",
+  "insumos": {
+    "agua": { "sim": true, "observacao": "Oferta de agua suficiente para a atividade." },
+    "energia_eletrica": { "sim": true, "observacao": "Energia eletrica atende as necessidades atuais." },
+    "mao_de_obra": { "sim": true, "observacao": "Mao de obra propria." },
+    "pastagens": { "sim": true, "observacao": "Pastagens formadas predominantemente por braquiaria." }
+  },
+  "insumos_comentarios": "Propriedade ativa na pecuaria de recria, com disponibilidade adequada de insumos basicos.",
+  "recursos_proprios": "100% do recurso utilizado",
+  "observacoes_recursos": "Produtor tradicional na regiao, com experiencia na atividade.",
+  "perspectivas": {
+    "aquisicao_de_animais": { "sim": true, "observacao": "Aquisicao de animais para incremento produtivo." },
+    "reforma_de_pastagens": { "sim": true, "observacao": "Reforma de pastagens degradadas." }
+  },
+  "outros_comentarios": "Exploracao agropecuaria baseada na bovinocultura de corte em sistema extensivo.",
+  "conclusao": "Conclui-se que o produtor desenvolve atividade regular, com estrutura produtiva compativel e necessidade de credito aderente ao projeto apresentado."
+}
+
