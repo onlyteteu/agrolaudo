@@ -88,6 +88,64 @@ Atividade regular.
 """
 
 
+SANDRO_STYLE_TEXT = """
+1. DISCRIMINACAO
+Nome da propriedade: Complexo Agropecuario Teste (Fazendas: Boa Sorte, Sao Judas, Santa Camila, Sao Jose dos Anjicos e Santa Carolina)
+
+Dados de Area e Exploracao por Propriedade:
+
+Fazenda Boa Sorte
+Area Total (ha): 3.388,00 ha
+Area de Pastagens (ha): 2.371,60 ha
+Area de Cultivo (ha): 1.016,40 ha
+Atividade principal desenvolvida: Pecuaria de corte (Recria)
+Principais culturas: Pastagens de Andropogon, Quicuia e Braquiarao
+
+Fazenda Sao Judas
+Area Total (ha): 2.429,68 ha
+Area de Pastagens (ha): 1.700,78 ha
+Area de Cultivo (ha): 728,90 ha
+Atividade principal desenvolvida: Pecuaria de corte (Cria)
+Principais culturas: Pastagens de Andropogon
+
+Fazenda Santa Camila
+Area Total (ha): 1.863,40 ha
+Area de Pastagens (ha): 1.304,38 ha
+Area de Cultivo (ha): 559,02 ha
+Atividade principal desenvolvida: Pecuaria de corte (Cria)
+Principais culturas: Pastagens de Quicuia
+
+Fazenda Sao Jose dos Anjicos
+Area Total (ha): 731,00 ha
+Area de Pastagens (ha): 511,70 ha
+Area de Cultivo (ha): 219,30 ha
+Atividade principal desenvolvida: Pecuaria de corte (Recria estruturada)
+Principais culturas: Pastagens de Andropogon
+
+Fazenda Santa Carolina
+Area Total (ha): 821,00 ha
+Area de Pastagens (ha): 574,70 ha
+Area de Cultivo (ha): 246,30 ha
+Atividade principal desenvolvida: Pecuaria de corte (Terminacao)
+Principais culturas: Pastagens de Andropogon
+
+2. TIPO (Benfeitorias e Infraestrutura)
+O complexo pecuario apresenta infraestrutura integrada e alto padrao tecnico.
+
+INVESTIMENTOS EM ANDAMENTO (Comentarios)
+Projeto com cinco unidades produtivas e manejo integrado.
+
+OUTROS COMENTARIOS
+Operacao conduzida em grande escala com controles mensais.
+
+CONCLUSAO
+Atividade regular e tecnicamente recomendada.
+
+FRASES DIRETAS
+COMPLEXO PECUARIO COM CINCO UNIDADES PRODUTIVAS INTEGRADAS.
+"""
+
+
 def assert_equal(actual, expected, label: str) -> None:
     if isinstance(expected, float):
         if round(float(actual), 2) != round(expected, 2):
@@ -109,13 +167,32 @@ def main() -> None:
 
     multiple_output = generate_report(MULTIPLE_PROPERTY_TEXT, output_path=OUTPUT_DIR / "multiplas-propriedades.xlsx")
     multiple_worksheet = load_workbook(multiple_output).active
-    assert_equal(multiple_worksheet["A18"].value, "Fazenda Boa Vista; Fazenda Santa Luzia", "multiplas propriedades celula A18")
+    assert_equal(multiple_worksheet["A18"].value, "Fazenda Boa Vista", "primeira propriedade celula A18")
+    assert_equal(multiple_worksheet["A19"].value, "Fazenda Santa Luzia", "segunda propriedade celula A19")
 
     phrase = parse_report_data("O produtor explora as fazendas Fazenda Primavera e Fazenda Santa Clara localizadas em Morrinhos-GO.")
     assert_equal(phrase.get("imoveis"), [{"nome": "Fazenda Primavera"}, {"nome": "Fazenda Santa Clara"}], "multiplas propriedades em frase")
 
     from_json = parse_report_data({"imoveis": [{"nome": "Fazenda Modelo"}, {"nome": "Sitio Dois Irmaos"}]})
     assert_equal(from_json.get("imovel_nome"), "Fazenda Modelo; Sitio Dois Irmaos", "multiplas propriedades em JSON")
+
+    sandro_style = parse_report_data(SANDRO_STYLE_TEXT)
+    assert_equal(len(sandro_style.get("imoveis", [])), 5, "sandro quantidade de propriedades")
+    assert_equal(sandro_style["imoveis"][0]["area_total_ha"], 3388.0, "sandro area primeira propriedade")
+    assert_equal(sandro_style.get("area_total_ha"), 9233.08, "sandro area total consolidada")
+
+    sandro_output = generate_report(SANDRO_STYLE_TEXT, output_path=OUTPUT_DIR / "sandro-multiplas-propriedades.xlsx")
+    sandro_worksheet = load_workbook(sandro_output).active
+    assert_equal(sandro_worksheet["A18"].value, "Fazenda Boa Sorte", "sandro propriedade linha 18")
+    assert_equal(sandro_worksheet["A19"].value, "Fazenda Sao Judas", "sandro propriedade linha 19")
+    assert_equal(sandro_worksheet["A20"].value, "Fazenda Santa Camila", "sandro propriedade linha 20")
+    assert_equal(sandro_worksheet["A21"].value, "Fazenda Sao Jose dos Anjicos", "sandro propriedade linha 21")
+    assert_equal(sandro_worksheet["A22"].value, "Fazenda Santa Carolina", "sandro propriedade linha 22")
+    assert_equal(sandro_worksheet["D22"].value, 821.0, "sandro area quinta propriedade")
+    assert_equal(sandro_worksheet["A24"].value, "3        BENFEITORIAS", "sandro secao benfeitorias deslocada")
+    assert_equal(sandro_worksheet["A28"].value, "O complexo pecuario apresenta infraestrutura integrada e alto padrao tecnico.", "sandro texto benfeitorias deslocado")
+    assert_equal(sandro_worksheet["D94"].value, "Projeto com cinco unidades produtivas e manejo integrado.", "sandro investimentos deslocado")
+    assert_equal(sandro_worksheet["D106"].value, "COMPLEXO PECUARIO COM CINCO UNIDADES PRODUTIVAS INTEGRADAS.", "sandro frase direta deslocada")
 
     photo_output = generate_report(
         CASES[0]["source"].read_text(encoding="utf-8"),

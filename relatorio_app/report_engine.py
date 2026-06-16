@@ -15,6 +15,7 @@ from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.drawing.image import Image as ExcelImage
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
+from openpyxl.utils import get_column_letter, range_boundaries
 from openpyxl.worksheet.worksheet import Worksheet
 from PIL import Image, ImageOps
 
@@ -37,6 +38,11 @@ DEFAULT_TEMPLATE = ROOT_DIR / "templates" / "relatorio-modelo.xlsx"
 DEFAULT_OUTPUT_DIR = ROOT_DIR / "outputs"
 PHOTO_CAPTION_FILL = PatternFill("solid", fgColor="E7F1E8")
 PHOTO_FRAME_SIDE = Side(style="medium", color="5A6F5B")
+PROPERTY_START_ROW = 18
+PROPERTY_TEMPLATE_END_ROW = 21
+PROPERTY_INSERT_AT_ROW = 22
+PROPERTY_SHIFT_START_ROW = 23
+PROPERTY_BASE_CAPACITY = PROPERTY_TEMPLATE_END_ROW - PROPERTY_START_ROW + 1
 
 
 def normalize_key(value: str) -> str:
@@ -126,8 +132,19 @@ def parse_narrative_report(text: str) -> dict[str, Any]:
         if value:
             data[field] = value
 
-    property_names = extract_property_names(compact, data.get("imovel_nome"), stop_pattern)
-    if property_names:
+    structured_properties = parse_property_area_sections(text)
+    if structured_properties:
+        data["imoveis"] = structured_properties
+        data["imovel_nome"] = format_property_names([str(item["nome"]) for item in structured_properties if item.get("nome")])
+        totals = aggregate_property_totals(structured_properties)
+        data.update({key: value for key, value in totals.items() if value not in (None, "")})
+    else:
+        property_names = extract_property_names(compact, data.get("imovel_nome"), stop_pattern)
+        if len(property_names) > 1:
+            data["imoveis"] = [{"nome": name} for name in property_names]
+
+    property_names = property_names_from_value(data.get("imoveis")) or extract_property_names(compact, data.get("imovel_nome"), stop_pattern)
+    if property_names and not structured_properties:
         if len(property_names) > 1:
             data["imoveis"] = [{"nome": name} for name in property_names]
             data["imovel_nome"] = format_property_names(property_names)
@@ -315,6 +332,84 @@ def extract_rebanho(text: str) -> str | None:
     return None
 
 
+def parse_property_area_sections(text: str) -> list[dict[str, Any]]:
+    lines = [line.strip() for line in text.splitlines()]
+    start_index = None
+    for index, line in enumerate(lines):
+        normalized = normalize_key(line)
+        if "dados_de_area" in normalized and "propriedade" in normalized:
+            start_index = index + 1
+            break
+
+    if start_index is None:
+        return []
+
+    properties: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+
+    for raw_line in lines[start_index:]:
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        normalized = normalize_key(line)
+        if re.match(r"^\d+\.\s*(?:TIPO|DESCRICAO|DESCRI)", line, flags=re.IGNORECASE) or normalized.startswith("tipo_benfeitorias"):
+            break
+
+        if is_property_heading(line):
+            current = {"nome": clean_property_name(line)}
+            properties.append(current)
+            continue
+
+        if current is None:
+            continue
+
+        match = re.match(r"^([^:]{2,90})\s*:\s*(.+)$", line)
+        if not match:
+            continue
+
+        key = normalize_key(match.group(1))
+        value = clean_text_value(match.group(2))
+        if key.startswith("area_total"):
+            current["area_total_ha"] = parse_decimal_pt(value)
+            alqueires = extract_area_alqueires(str(value))
+            if alqueires:
+                current["area_alqueires"] = alqueires
+        elif "pastagens" in key:
+            current["area_pastagens_ha"] = parse_decimal_pt(value)
+        elif "cultivo" in key:
+            current["area_cultivo_ha"] = parse_decimal_pt(value)
+        elif "atividade_principal" in key or key.startswith("atividade"):
+            current["atividade_principal"] = value
+        elif "principais_culturas" in key or key == "culturas":
+            current["principais_culturas"] = value
+
+    return [item for item in properties if item.get("nome")]
+
+
+def is_property_heading(value: str) -> bool:
+    if ":" in value or len(value) > 90:
+        return False
+    return starts_with_property_type(value)
+
+
+def aggregate_property_totals(properties: list[dict[str, Any]]) -> dict[str, Any]:
+    totals: dict[str, Any] = {}
+    numeric_fields = ("area_total_ha", "area_pastagens_ha", "area_cultivo_ha", "area_financiada_bb_ha", "area_financiada_outros_ha")
+    for field in numeric_fields:
+        values = [item.get(field) for item in properties if isinstance(item.get(field), (int, float))]
+        if values:
+            totals[field] = round(sum(float(value) for value in values), 2)
+
+    first_activity = next((item.get("atividade_principal") for item in properties if item.get("atividade_principal")), None)
+    first_cultures = next((item.get("principais_culturas") for item in properties if item.get("principais_culturas")), None)
+    if first_activity and all(item.get("atividade_principal") in (None, "", first_activity) for item in properties):
+        totals["atividade_principal"] = first_activity
+    if first_cultures and all(item.get("principais_culturas") in (None, "", first_cultures) for item in properties):
+        totals["principais_culturas"] = first_cultures
+    return totals
+
+
 def extract_property_names(text: str, explicit_value: Any = None, stop_pattern: str | None = None) -> list[str]:
     names = property_names_from_value(explicit_value)
     patterns = [
@@ -490,10 +585,14 @@ def normalize_data(data: dict[str, Any]) -> dict[str, Any]:
         else:
             normalized[normalized_key] = value
 
-    property_names = property_names_from_value(normalized.get("imoveis"))
-    if property_names:
-        normalized["imoveis"] = [{"nome": name} for name in property_names]
+    property_items = normalize_property_items(normalized.get("imoveis"))
+    property_names = property_names_from_value(property_items)
+    if property_items:
+        normalized["imoveis"] = property_items
         normalized.setdefault("imovel_nome", format_property_names(property_names))
+        totals = aggregate_property_totals(property_items)
+        for key, value in totals.items():
+            normalized.setdefault(key, value)
     else:
         property_names = property_names_from_value(normalized.get("imovel_nome"))
         if len(property_names) > 1:
@@ -505,6 +604,27 @@ def normalize_data(data: dict[str, Any]) -> dict[str, Any]:
 
 def normalize_nested_dict(value: dict[str, Any]) -> dict[str, Any]:
     return {normalize_key(k): v for k, v in value.items()}
+
+
+def normalize_property_items(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+
+    items: list[dict[str, Any]] = []
+    for item in value:
+        if isinstance(item, dict):
+            normalized_item: dict[str, Any] = {}
+            for key, raw_value in item.items():
+                normalized_key = FIELD_ALIASES.get(normalize_key(key), normalize_key(key))
+                normalized_item[normalized_key] = parse_decimal_pt(raw_value) if normalized_key.startswith("area_") and raw_value not in (None, "") else raw_value
+            if normalized_item.get("nome") or normalized_item.get("imovel_nome"):
+                normalized_item["nome"] = clean_property_name(str(normalized_item.get("nome", normalized_item.get("imovel_nome"))))
+                items.append(normalized_item)
+        else:
+            for name in split_property_names(item):
+                items.append({"nome": name})
+
+    return items
 
 
 def generate_report(
@@ -526,33 +646,152 @@ def generate_report(
     workbook = load_workbook(template)
     worksheet = workbook[SHEET_NAME] if SHEET_NAME in workbook.sheetnames else workbook.active
 
-    clear_variable_model_values(worksheet)
-    apply_fields(worksheet, data)
-    apply_equipment(worksheet, data.get("equipamentos", []))
-    apply_insumos(worksheet, data.get("insumos", {}))
-    apply_perspectivas(worksheet, data.get("perspectivas", {}))
-    polish_written_ranges(worksheet)
+    row_offset = prepare_property_rows(worksheet, data)
+    clear_variable_model_values(worksheet, row_offset)
+    apply_fields(worksheet, data, row_offset)
+    apply_property_rows(worksheet, data)
+    apply_equipment(worksheet, data.get("equipamentos", []), row_offset)
+    apply_insumos(worksheet, data.get("insumos", {}), row_offset)
+    apply_perspectivas(worksheet, data.get("perspectivas", {}), row_offset)
+    polish_written_ranges(worksheet, row_offset)
     adjust_dynamic_row_heights(worksheet)
-    apply_photos(worksheet, photo_paths or [], output.parent / f"{output.stem}-images")
+    apply_photos(worksheet, photo_paths or [], output.parent / f"{output.stem}-images", row_offset)
 
     workbook.save(output)
     return output
 
 
-def clear_variable_model_values(worksheet: Worksheet) -> None:
+def prepare_property_rows(worksheet: Worksheet, data: dict[str, Any]) -> int:
+    properties = normalize_property_items(data.get("imoveis"))
+    extra_rows = max(0, len(properties) - PROPERTY_BASE_CAPACITY)
+    if not extra_rows:
+        return 0
+
+    shifted_merges = collect_shifted_merged_ranges(worksheet, PROPERTY_INSERT_AT_ROW, extra_rows)
+    worksheet.insert_rows(PROPERTY_INSERT_AT_ROW, extra_rows)
+    for merge_range in shifted_merges:
+        worksheet.merge_cells(merge_range)
+    for row in range(PROPERTY_INSERT_AT_ROW, PROPERTY_INSERT_AT_ROW + extra_rows):
+        copy_row_style(worksheet, PROPERTY_TEMPLATE_END_ROW, row)
+        merge_property_row(worksheet, row)
+    return extra_rows
+
+
+def collect_shifted_merged_ranges(worksheet: Worksheet, insert_at: int, amount: int) -> list[str]:
+    shifted: list[str] = []
+    for merged_range in list(worksheet.merged_cells.ranges):
+        range_string = str(merged_range)
+        min_col, min_row, max_col, max_row = range_boundaries(range_string)
+        if min_row >= insert_at:
+            worksheet.unmerge_cells(range_string)
+            shifted.append(
+                f"{get_column_letter(min_col)}{min_row + amount}:"
+                f"{get_column_letter(max_col)}{max_row + amount}"
+            )
+    return shifted
+
+
+def copy_row_style(worksheet: Worksheet, source_row: int, target_row: int) -> None:
+    worksheet.row_dimensions[target_row].height = worksheet.row_dimensions[source_row].height
+    for col in range(1, worksheet.max_column + 1):
+        source = worksheet.cell(row=source_row, column=col)
+        target = worksheet.cell(row=target_row, column=col)
+        if source.has_style:
+            target._style = copy(source._style)
+        target.font = copy(source.font)
+        target.fill = copy(source.fill)
+        target.border = copy(source.border)
+        target.alignment = copy(source.alignment)
+        target.number_format = source.number_format
+        target.protection = copy(source.protection)
+
+
+def merge_property_row(worksheet: Worksheet, row: int) -> None:
+    for start_col, end_col in (("A", "C"), ("I", "J")):
+        range_string = f"{start_col}{row}:{end_col}{row}"
+        if range_string not in [str(merged) for merged in worksheet.merged_cells.ranges]:
+            worksheet.merge_cells(range_string)
+
+
+def apply_property_rows(worksheet: Worksheet, data: dict[str, Any]) -> None:
+    properties = normalize_property_items(data.get("imoveis"))
+    if len(properties) == 1:
+        first = properties[0]
+        for key in (
+            "area_total_ha",
+            "area_pastagens_ha",
+            "area_cultivo_ha",
+            "area_financiada_bb_ha",
+            "area_financiada_outros_ha",
+            "atividade_principal",
+            "principais_culturas",
+        ):
+            if first.get(key) in (None, "") and data.get(key) not in (None, ""):
+                first[key] = data.get(key)
+    if not properties:
+        properties = [
+            {
+                "nome": data.get("imovel_nome"),
+                "area_total_ha": data.get("area_total_ha"),
+                "area_pastagens_ha": data.get("area_pastagens_ha"),
+                "area_cultivo_ha": data.get("area_cultivo_ha"),
+                "area_financiada_bb_ha": data.get("area_financiada_bb_ha"),
+                "area_financiada_outros_ha": data.get("area_financiada_outros_ha"),
+                "atividade_principal": data.get("atividade_principal"),
+                "principais_culturas": data.get("principais_culturas"),
+            }
+        ]
+
+    clear_property_rows(worksheet, max(PROPERTY_BASE_CAPACITY, len(properties)))
+    for index, item in enumerate(properties):
+        row = PROPERTY_START_ROW + index
+        set_cell(worksheet, f"A{row}", item.get("nome"))
+        set_cell(worksheet, f"D{row}", item.get("area_total_ha"))
+        set_cell(worksheet, f"E{row}", item.get("area_pastagens_ha"))
+        set_cell(worksheet, f"F{row}", item.get("area_cultivo_ha"))
+        set_cell(worksheet, f"G{row}", item.get("area_financiada_bb_ha"))
+        set_cell(worksheet, f"H{row}", item.get("area_financiada_outros_ha"))
+        set_cell(worksheet, f"I{row}", item.get("atividade_principal"))
+        set_cell(worksheet, f"K{row}", item.get("principais_culturas"))
+
+
+def clear_property_rows(worksheet: Worksheet, row_count: int) -> None:
+    for row in range(PROPERTY_START_ROW, PROPERTY_START_ROW + row_count):
+        for col in ("A", "D", "E", "F", "G", "H", "I", "K"):
+            set_cell(worksheet, f"{col}{row}", None)
+
+
+def shifted_coordinate(coordinate: str, row_offset: int, start_row: int = PROPERTY_SHIFT_START_ROW) -> str:
+    if not row_offset:
+        return coordinate
+    match = re.fullmatch(r"([A-Z]+)(\d+)", coordinate)
+    if not match:
+        return coordinate
+    col, row_text = match.groups()
+    row = int(row_text)
+    if row >= start_row:
+        row += row_offset
+    return f"{col}{row}"
+
+
+def shifted_row(row: int, row_offset: int, start_row: int = PROPERTY_SHIFT_START_ROW) -> int:
+    return row + row_offset if row >= start_row else row
+
+
+def clear_variable_model_values(worksheet: Worksheet, row_offset: int = 0) -> None:
     for cell in ["B4", *FIELD_TO_CELL.values(), *(cell for cell, _ in DATE_FIELDS.values())]:
-        set_cell(worksheet, cell, None)
+        set_cell(worksheet, shifted_coordinate(cell, row_offset), None)
 
     for cell in ["A27", "F27", "G27", "H27", "I27", "F30", "G30", "H30", "I30", "F32", "G32", "H32", "I32"]:
-        set_cell(worksheet, cell, None)
+        set_cell(worksheet, shifted_coordinate(cell, row_offset), None)
 
-    clear_equipment_rows(worksheet)
-    clear_yes_no_area(worksheet, INSUMO_ROWS.values(), "E", "F", "G")
-    clear_yes_no_area(worksheet, PERSPECTIVA_ROWS.values(), "F", "G", "H")
-    clear_legacy_option_marks(worksheet)
+    clear_equipment_rows(worksheet, row_offset)
+    clear_yes_no_area(worksheet, INSUMO_ROWS.values(), "E", "F", "G", row_offset)
+    clear_yes_no_area(worksheet, PERSPECTIVA_ROWS.values(), "F", "G", "H", row_offset)
+    clear_legacy_option_marks(worksheet, row_offset)
 
 
-def apply_fields(worksheet: Worksheet, data: dict[str, Any]) -> None:
+def apply_fields(worksheet: Worksheet, data: dict[str, Any], row_offset: int = 0) -> None:
     client_block = build_client_block(data)
     if client_block:
         set_cell(worksheet, "B4", client_block)
@@ -560,24 +799,36 @@ def apply_fields(worksheet: Worksheet, data: dict[str, Any]) -> None:
     if not data.get("finalidade_vistoria"):
         data["finalidade_vistoria"] = "VERIFICAÇÃO IN-LOCO DE REAIS CONDIÇÕES DE PRODUTIVIDADE DO CLIENTE EM QUESTÃO;"
 
+    property_fields = {
+        "imovel_nome",
+        "area_total_ha",
+        "area_pastagens_ha",
+        "area_cultivo_ha",
+        "area_financiada_bb_ha",
+        "area_financiada_outros_ha",
+        "atividade_principal",
+        "principais_culturas",
+    }
     for field, cell in FIELD_TO_CELL.items():
+        if field in property_fields:
+            continue
         value = data.get(field)
         if value not in (None, ""):
-            set_cell(worksheet, cell, value)
+            set_cell(worksheet, shifted_coordinate(cell, row_offset), value)
 
     for field, (cell, pattern) in DATE_FIELDS.items():
         value = data.get(field)
         if value not in (None, ""):
-            set_cell(worksheet, cell, pattern.format(value))
+            set_cell(worksheet, shifted_coordinate(cell, row_offset), pattern.format(value))
 
     conservacao = normalize_key(str(data.get("benfeitorias_conservacao", "")))
     if conservacao:
-        set_mark(worksheet, "F27", conservacao.startswith("bom"))
-        set_mark(worksheet, "G27", conservacao.startswith("regular"))
-        set_mark(worksheet, "H27", conservacao.startswith("ruim"))
+        set_mark(worksheet, shifted_coordinate("F27", row_offset), conservacao.startswith("bom"))
+        set_mark(worksheet, shifted_coordinate("G27", row_offset), conservacao.startswith("regular"))
+        set_mark(worksheet, shifted_coordinate("H27", row_offset), conservacao.startswith("ruim"))
 
     if data.get("raw_text") and not data.get("outros_comentarios"):
-        set_cell(worksheet, "B181", data["raw_text"])
+        set_cell(worksheet, shifted_coordinate("B181", row_offset), data["raw_text"])
 
 
 def build_client_block(data: dict[str, Any]) -> str | None:
@@ -631,15 +882,15 @@ def build_property_line(data: dict[str, Any]) -> str | None:
     return str(name)
 
 
-def apply_equipment(worksheet: Worksheet, equipment: Any) -> None:
-    clear_equipment_rows(worksheet)
+def apply_equipment(worksheet: Worksheet, equipment: Any, row_offset: int = 0) -> None:
+    clear_equipment_rows(worksheet, row_offset)
     if not isinstance(equipment, list):
         return
 
     for index, item in enumerate(equipment[: EQUIPMENT_END_ROW - EQUIPMENT_START_ROW + 1]):
         if not isinstance(item, dict):
             continue
-        row = EQUIPMENT_START_ROW + index
+        row = shifted_row(EQUIPMENT_START_ROW + index, row_offset)
         normalized_item = normalize_nested_dict(item)
         for field, col in EQUIPMENT_COLUMNS.items():
             value = normalized_item.get(field)
@@ -647,8 +898,8 @@ def apply_equipment(worksheet: Worksheet, equipment: Any) -> None:
                 set_cell(worksheet, f"{col}{row}", value)
 
 
-def apply_insumos(worksheet: Worksheet, insumos: Any) -> None:
-    clear_yes_no_area(worksheet, INSUMO_ROWS.values(), "E", "F", "G")
+def apply_insumos(worksheet: Worksheet, insumos: Any, row_offset: int = 0) -> None:
+    clear_yes_no_area(worksheet, INSUMO_ROWS.values(), "E", "F", "G", row_offset)
     if not isinstance(insumos, dict):
         return
 
@@ -656,11 +907,11 @@ def apply_insumos(worksheet: Worksheet, insumos: Any) -> None:
         item = insumos.get(key)
         if item is None:
             continue
-        apply_yes_no_observation(worksheet, row, "E", "F", "G", item)
+        apply_yes_no_observation(worksheet, shifted_row(row, row_offset), "E", "F", "G", item)
 
 
-def apply_perspectivas(worksheet: Worksheet, perspectivas: Any) -> None:
-    clear_yes_no_area(worksheet, PERSPECTIVA_ROWS.values(), "F", "G", "H")
+def apply_perspectivas(worksheet: Worksheet, perspectivas: Any, row_offset: int = 0) -> None:
+    clear_yes_no_area(worksheet, PERSPECTIVA_ROWS.values(), "F", "G", "H", row_offset)
     if not isinstance(perspectivas, dict):
         return
 
@@ -669,7 +920,7 @@ def apply_perspectivas(worksheet: Worksheet, perspectivas: Any) -> None:
         item = normalized.get(key)
         if item is None:
             continue
-        apply_yes_no_observation(worksheet, row, "F", "G", "H", item)
+        apply_yes_no_observation(worksheet, shifted_row(row, row_offset), "F", "G", "H", item)
 
 
 def apply_yes_no_observation(
@@ -739,20 +990,22 @@ def top_left_for_merged_cell(worksheet: Worksheet, coordinate: str) -> str:
     return coordinate
 
 
-def clear_equipment_rows(worksheet: Worksheet) -> None:
+def clear_equipment_rows(worksheet: Worksheet, row_offset: int = 0) -> None:
     rows = [40, *range(EQUIPMENT_START_ROW, EQUIPMENT_END_ROW + 2)]
     for row in rows:
+        shifted = shifted_row(row, row_offset)
         for col in EQUIPMENT_COLUMNS.values():
-            set_cell(worksheet, f"{col}{row}", None)
+            set_cell(worksheet, f"{col}{shifted}", None)
 
 
-def clear_yes_no_area(worksheet: Worksheet, rows: Any, yes_col: str, no_col: str, observation_col: str) -> None:
+def clear_yes_no_area(worksheet: Worksheet, rows: Any, yes_col: str, no_col: str, observation_col: str, row_offset: int = 0) -> None:
     for row in rows:
+        shifted = shifted_row(row, row_offset)
         for col in (yes_col, no_col, observation_col):
-            set_cell(worksheet, f"{col}{row}", None)
+            set_cell(worksheet, f"{col}{shifted}", None)
 
 
-def clear_legacy_option_marks(worksheet: Worksheet) -> None:
+def clear_legacy_option_marks(worksheet: Worksheet, row_offset: int = 0) -> None:
     option_cells = [
         "A150",
         "D150",
@@ -769,20 +1022,20 @@ def clear_legacy_option_marks(worksheet: Worksheet) -> None:
         "B176",
     ]
     for coordinate in option_cells:
-        target = top_left_for_merged_cell(worksheet, coordinate)
+        target = top_left_for_merged_cell(worksheet, shifted_coordinate(coordinate, row_offset))
         value = worksheet[target].value
         if isinstance(value, str):
             worksheet[target].value = re.sub(r"\(\s*[xX]\s*\)", "(   )", value)
 
     for coordinate in ["B172", "B176"]:
-        target = top_left_for_merged_cell(worksheet, coordinate)
+        target = top_left_for_merged_cell(worksheet, shifted_coordinate(coordinate, row_offset))
         value = worksheet[target].value
         if isinstance(value, str) and ":" in value:
             prefix = value.split(":", 1)[0].rstrip()
             worksheet[target].value = f"{prefix}: "
 
 
-def polish_written_ranges(worksheet: Worksheet) -> None:
+def polish_written_ranges(worksheet: Worksheet, row_offset: int = 0) -> None:
     wrap_cells = [
         "B4",
         "C8",
@@ -800,7 +1053,7 @@ def polish_written_ranges(worksheet: Worksheet) -> None:
         "B190",
     ]
     for coordinate in wrap_cells:
-        target = top_left_for_merged_cell(worksheet, coordinate)
+        target = top_left_for_merged_cell(worksheet, shifted_coordinate(coordinate, row_offset))
         cell = worksheet[target]
         cell.alignment = copy(cell.alignment)
         cell.alignment = Alignment(
@@ -809,9 +1062,10 @@ def polish_written_ranges(worksheet: Worksheet) -> None:
             wrap_text=True,
         )
 
-    for coordinate in ["D18", "E18", "F18", "G18", "H18"]:
-        target = top_left_for_merged_cell(worksheet, coordinate)
-        worksheet[target].number_format = "0.00"
+    for row in range(PROPERTY_START_ROW, PROPERTY_TEMPLATE_END_ROW + row_offset + 1):
+        for col in ("D", "E", "F", "G", "H"):
+            target = top_left_for_merged_cell(worksheet, f"{col}{row}")
+            worksheet[target].number_format = "0.00"
 
 
 def adjust_dynamic_row_heights(worksheet: Worksheet) -> None:
@@ -821,10 +1075,10 @@ def adjust_dynamic_row_heights(worksheet: Worksheet) -> None:
         worksheet.row_dimensions[4].height = max(96, min(210, line_count * 18 + 18))
 
 
-def apply_photos(worksheet: Worksheet, photo_paths: list[str | Path], image_output_dir: Path) -> None:
+def apply_photos(worksheet: Worksheet, photo_paths: list[str | Path], image_output_dir: Path, row_offset: int = 0) -> None:
     valid_photos = [Path(path) for path in photo_paths if Path(path).exists()]
     remove_old_report_photos(worksheet)
-    clear_photo_slots(worksheet)
+    clear_photo_slots(worksheet, row_offset)
     if not valid_photos:
         return
 
@@ -832,6 +1086,8 @@ def apply_photos(worksheet: Worksheet, photo_paths: list[str | Path], image_outp
 
     for index, photo_path in enumerate(valid_photos[: len(PHOTO_ANCHORS)]):
         from_row, from_col, to_row, to_col = PHOTO_ANCHORS[index]
+        from_row = shifted_row(from_row + 1, row_offset) - 1
+        to_row = shifted_row(to_row + 1, row_offset) - 1
         format_photo_slot(worksheet, index + 1, from_row, from_col, to_row, to_col)
 
         prepared_path = prepare_photo(photo_path, image_output_dir, index + 1)
@@ -845,8 +1101,10 @@ def apply_photos(worksheet: Worksheet, photo_paths: list[str | Path], image_outp
         worksheet.add_image(image)
 
 
-def clear_photo_slots(worksheet: Worksheet) -> None:
+def clear_photo_slots(worksheet: Worksheet, row_offset: int = 0) -> None:
     for from_row, from_col, to_row, to_col in PHOTO_ANCHORS:
+        from_row = shifted_row(from_row + 1, row_offset) - 1
+        to_row = shifted_row(to_row + 1, row_offset) - 1
         for row in range(from_row + 1, to_row + 2):
             for col in range(from_col + 1, to_col + 2):
                 cell = worksheet.cell(row=row, column=col)

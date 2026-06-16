@@ -37,6 +37,7 @@ DATE_FIELDS = {
 
 FIELD_ALIASES = {
     "cliente": "cliente",
+    "nome": "nome",
     "nome_cliente": "cliente",
     "produtor": "cliente",
     "nome_produtor": "cliente",
