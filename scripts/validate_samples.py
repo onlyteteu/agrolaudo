@@ -246,6 +246,10 @@ def assert_equal(actual, expected, label: str) -> None:
         raise AssertionError(f"{label}: esperado {expected!r}, veio {actual!r}")
 
 
+def border_style(side: object) -> str | None:
+    return getattr(side, "style", None)
+
+
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     for raw, expected in {"29,04 ha": 29.04, "29.04": 29.04, "1.234,56": 1234.56}.items():
@@ -313,7 +317,7 @@ def main() -> None:
     photo_output = generate_report(
         CASES[0]["source"].read_text(encoding="utf-8"),
         sorted((ROOT / "sample_photos").glob("*.jpg")),
-        OUTPUT_DIR / "fotos-com-moldura.xlsx",
+        OUTPUT_DIR / "fotos-numeradas.xlsx",
     )
     photo_worksheet = load_workbook(photo_output).active
     report_photo_rows = [
@@ -324,11 +328,11 @@ def main() -> None:
     assert_equal(report_photo_rows, [210, 229, 248], "posicao das fotos inseridas")
     assert_equal(photo_worksheet["D209"].value, "Foto 01", "legenda primeira foto")
     assert_equal(photo_worksheet["D228"].value, "Foto 02", "legenda segunda foto")
-    assert_equal(photo_worksheet["D209"].border.top.style, "medium", "borda superior primeira foto")
-    assert_equal(photo_worksheet["D209"].border.left.style, "medium", "borda esquerda primeira foto")
-    assert_equal(photo_worksheet["J226"].border.right.style, "medium", "borda direita primeira foto")
-    assert_equal(photo_worksheet["J226"].border.bottom.style, "medium", "borda inferior primeira foto")
-    prepared_photo = OUTPUT_DIR / "fotos-com-moldura-images" / "foto-01.jpg"
+    assert_equal(border_style(photo_worksheet["D209"].border.top), None, "sem borda superior na legenda da primeira foto")
+    assert_equal(border_style(photo_worksheet["D210"].border.left), None, "sem borda esquerda na primeira foto")
+    assert_equal(border_style(photo_worksheet["J226"].border.right), None, "sem borda direita na primeira foto")
+    assert_equal(border_style(photo_worksheet["J226"].border.bottom), None, "sem borda inferior na primeira foto")
+    prepared_photo = OUTPUT_DIR / "fotos-numeradas-images" / "foto-01.jpg"
     with Image.open(prepared_photo) as image:
         assert_equal(image.size, (520, 330), "tamanho da foto preparada")
         left_edge = [image.getpixel((0, y)) for y in range(image.height)]
