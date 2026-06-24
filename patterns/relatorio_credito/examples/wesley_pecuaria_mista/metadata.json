@@ -1,0 +1,14 @@
+{
+  "id": "wesley_pecuaria_mista",
+  "title": "Pecuária mista com leite e corte",
+  "approved": true,
+  "output_path": "sample_gemini_text.txt",
+  "tags": [
+    "pecuaria_mista",
+    "leite",
+    "pecuaria_corte",
+    "pastagens",
+    "propriedade_unica"
+  ],
+  "notes": "Resposta Gemini já usada como amostra validada do padrão atual."
+}

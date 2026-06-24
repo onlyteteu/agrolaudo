@@ -1,0 +1,14 @@
+{
+  "id": "mandioca_olericultura",
+  "title": "Cultivo comercial de mandioca",
+  "approved": true,
+  "output_path": "sample_mandioca_text.txt",
+  "tags": [
+    "mandioca",
+    "olericultura",
+    "lavoura",
+    "propriedade_unica",
+    "escoamento"
+  ],
+  "notes": "Resposta técnica validada como amostra agrícola."
+}

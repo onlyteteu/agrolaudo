@@ -1,0 +1,19 @@
+{
+  "id": "sandro_mabel_pecuaria_grande_escala",
+  "title": "Sandro Mabel - pecuária de corte em grande escala",
+  "approved": true,
+  "combined_path": "source.txt",
+  "final_workbook_path": "final.xlsx",
+  "tags": [
+    "pecuaria_corte",
+    "cria",
+    "recria",
+    "multi_propriedades",
+    "pastagens",
+    "grande_escala",
+    "andropogon",
+    "quicuia",
+    "braquiarao"
+  ],
+  "notes": "Caso aprovado pelo usuário; planilha enviada sem fotos. Usar como referência forte para pecuária de corte de grande escala com várias fazendas e rebanho segmentado por cria/recria."
+}

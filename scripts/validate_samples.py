@@ -10,7 +10,9 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from relatorio_app.pattern_library import build_writer_prompt, classify_case_tags, load_pattern_examples, select_pattern_examples
 from relatorio_app.report_engine import generate_report, parse_decimal_pt, parse_report_data
+from relatorio_app.technical_writer import generate_technical_report
 from server import parse_review_data
 
 OUTPUT_DIR = ROOT / "outputs" / "validation"
@@ -328,6 +330,97 @@ def main() -> None:
     assert_equal(manual_worksheet["A51"].value, "Trator Massey Ferguson 4292", "maquinario primeira linha")
     assert_equal(manual_worksheet["A52"].value, "Grade aradora 16 discos", "maquinario segunda linha")
     assert_equal(manual_worksheet["A51"].alignment.horizontal, "left", "maquinario alinhado a esquerda")
+
+    raw_arnaldo = (ROOT / "sample_raw_arnaldo.txt").read_text(encoding="utf-8")
+    technical_result = generate_technical_report(raw_arnaldo)
+    technical_parsed = parse_report_data(technical_result.report_text)
+    pattern_tags = classify_case_tags(raw_arnaldo)
+    assert_equal("multi_propriedades" in pattern_tags, True, "biblioteca tag multiplas propriedades")
+    assert_equal("milho" in pattern_tags, True, "biblioteca tag milho")
+    assert_equal("pecuaria_corte" in pattern_tags, True, "biblioteca tag pecuaria")
+    pattern_selection = select_pattern_examples(raw_arnaldo)
+    assert_equal(pattern_selection.examples[0].id, "arnaldo_melo_aprovado", "biblioteca seleciona exemplo arnaldo aprovado")
+    assert_equal(any(example.has_expected for example in pattern_selection.examples), True, "biblioteca carrega saidas aprovadas")
+    writer_prompt = build_writer_prompt(raw_arnaldo, technical_result.report_text, max_examples=2)
+    assert_equal("GUIA DE ESTILO:" in writer_prompt, True, "prompt inclui guia")
+    assert_equal("EXEMPLOS APROVADOS PARA IMITAR O PADRÃO:" in writer_prompt, True, "prompt inclui exemplos aprovados")
+    assert_equal("DADOS BRUTOS DA VISITA:" in writer_prompt, True, "prompt inclui dados brutos")
+    assert_equal("RASCUNHO LOCAL ESTRUTURADO:" in writer_prompt, True, "prompt inclui rascunho local")
+    assert_equal(technical_result.notes.client, "Arnaldo Moreira", "redator tecnico cliente")
+    assert_equal(len(technical_result.notes.properties), 4, "redator tecnico quantidade propriedades")
+    assert_equal(len(technical_result.notes.equipment), 12, "redator tecnico quantidade maquinarios")
+    assert_equal(technical_parsed.get("cliente"), "Arnaldo Moreira", "texto tecnico campo cliente")
+    assert_equal(technical_parsed.get("cpf_cnpj"), "863.546.041-34", "texto tecnico campo cpf")
+    assert_equal(technical_parsed.get("area_total_ha"), 271.04, "texto tecnico area total")
+    assert_equal(technical_parsed.get("area_pastagens_ha"), 162.62, "texto tecnico area pastagens")
+    assert_equal(technical_parsed.get("area_cultivo_ha"), 108.42, "texto tecnico area cultivo")
+    assert_equal(technical_parsed.get("principais_culturas"), "Milho, Pastagens de Braquiarão", "texto tecnico culturas")
+    assert_equal(len(technical_parsed.get("equipamentos", [])), 12, "texto tecnico equipamentos")
+    technical_output = generate_report(technical_result.report_text, output_path=OUTPUT_DIR / "arnaldo-dados-brutos.xlsx")
+    technical_worksheet = load_workbook(technical_output).active
+    assert_equal(technical_worksheet["B4"].value, "Arnaldo Moreira", "texto tecnico cliente excel")
+    assert_equal(technical_worksheet["A18"].value, "Fazenda Santa Rita", "texto tecnico primeira propriedade excel")
+    assert_equal(technical_worksheet["A21"].value, "Fazenda Engenho de São Benedito", "texto tecnico quarta propriedade excel")
+    assert_equal(technical_worksheet["D18"].value, 19.36, "texto tecnico area primeira propriedade excel")
+    assert_equal(technical_worksheet["A46"].value, None, "texto tecnico limpa equipamento antigo")
+    assert_equal(technical_worksheet["A51"].value, "Plantadeira Baldan 10 Linhas", "texto tecnico primeiro equipamento excel")
+    assert_equal(technical_worksheet["A54"].value, "Trator New Holland 7630", "texto tecnico quarto equipamento excel")
+
+    examples = {example.id: example for example in load_pattern_examples()}
+    assert_equal("arnaldo_melo_aprovado" in examples, True, "biblioteca contem arnaldo aprovado")
+    assert_equal("sandro_mabel_pecuaria_grande_escala" in examples, True, "biblioteca contem sandro aprovado")
+    assert_equal(examples["arnaldo_melo_aprovado"].has_expected, True, "arnaldo aprovado tem resposta")
+    assert_equal(examples["sandro_mabel_pecuaria_grande_escala"].has_expected, True, "sandro aprovado tem resposta")
+    sandro_tags = classify_case_tags(examples["sandro_mabel_pecuaria_grande_escala"].raw_text)
+    assert_equal("multi_propriedades" in sandro_tags, True, "sandro tag multiplas propriedades")
+    assert_equal("grande_escala" in sandro_tags, True, "sandro tag grande escala")
+    assert_equal("pecuaria_corte" in sandro_tags, True, "sandro tag pecuaria")
+    sandro_result = generate_technical_report(examples["sandro_mabel_pecuaria_grande_escala"].raw_text)
+    sandro_parsed = parse_report_data(sandro_result.report_text)
+    assert_equal(len(sandro_result.notes.properties), 3, "redator sandro quantidade propriedades")
+    assert_equal(sandro_parsed.get("area_total_ha"), 7681.08, "redator sandro area total")
+    assert_equal(sandro_parsed.get("area_pastagens_ha"), 5376.76, "redator sandro area pastagens")
+    assert_equal(sandro_parsed.get("area_cultivo_ha"), 2304.32, "redator sandro area cultivo")
+
+    approved_pattern_cases = {
+        "divino_piscicultura_pecuaria": {
+            "tags": ("piscicultura", "area_alugada", "pecuaria_corte"),
+            "properties": 2,
+            "areas": (33.88, 23.72, 10.16),
+        },
+        "alfredo_ciclo_completo_confinamento": {
+            "tags": ("ciclo_completo", "confinamento_seca", "piquetes"),
+            "properties": 2,
+            "areas": (532.40, 372.68, 159.72),
+        },
+        "socrates_pecuaria_duas_unidades": {
+            "tags": ("poco_artesiano", "rotacionado", "multi_propriedades"),
+            "properties": 2,
+            "areas": (329.31, 230.53, 98.79),
+        },
+        "vanderlei_recria_projetos_futuros": {
+            "tags": ("projetos_futuros", "reforma_pastagem", "aquisicao_animais"),
+            "properties": 1,
+            "areas": (94.38, 66.07, 28.31),
+        },
+    }
+    for example_id, expectations in approved_pattern_cases.items():
+        assert_equal(example_id in examples, True, f"biblioteca contem {example_id}")
+        example = examples[example_id]
+        assert_equal(example.has_expected, True, f"{example_id} tem resposta aprovada")
+        assert_equal(bool(example.final_workbook) and Path(example.final_workbook).exists(), True, f"{example_id} tem planilha final")
+        case_tags = classify_case_tags(example.raw_text)
+        for tag in expectations["tags"]:
+            assert_equal(tag in case_tags, True, f"{example_id} tag {tag}")
+        case_selection = select_pattern_examples(example.raw_text)
+        assert_equal(case_selection.examples[0].id, example_id, f"{example_id} seleciona exemplo correspondente")
+        case_result = generate_technical_report(example.raw_text)
+        case_parsed = parse_report_data(case_result.report_text)
+        assert_equal(len(case_result.notes.properties), expectations["properties"], f"{example_id} quantidade propriedades")
+        total, pasture, crop = expectations["areas"]
+        assert_equal(case_parsed.get("area_total_ha"), total, f"{example_id} area total")
+        assert_equal(case_parsed.get("area_pastagens_ha"), pasture, f"{example_id} area pastagens")
+        assert_equal(case_parsed.get("area_cultivo_ha"), crop, f"{example_id} area cultivo")
 
     photo_output = generate_report(
         CASES[0]["source"].read_text(encoding="utf-8"),

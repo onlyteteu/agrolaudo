@@ -1,0 +1,19 @@
+{
+  "id": "vanderlei_recria_projetos_futuros",
+  "title": "Vanderlei de Oliveira - recria com projetos futuros",
+  "approved": true,
+  "combined_path": "source.txt",
+  "final_workbook_path": "final.xlsx",
+  "tags": [
+    "pecuaria_corte",
+    "recria",
+    "propriedade_unica",
+    "pastagens",
+    "projetos_futuros",
+    "reforma_pastagem",
+    "aquisicao_animais",
+    "baixo_detalhamento",
+    "expansao"
+  ],
+  "notes": "Caso aprovado simples, útil para padrões com poucos dados brutos e foco em planejamento futuro de reforma de pastagens e aquisição de gado."
+}

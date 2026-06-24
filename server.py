@@ -1,18 +1,23 @@
 from __future__ import annotations
 
-import cgi
+from dataclasses import dataclass
+from email import policy
+from email.parser import BytesParser
 import html
 import json
 import mimetypes
 import os
-import shutil
 import uuid
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.parse import parse_qs, unquote
 
+from relatorio_app.ai_writer import generate_technical_report_auto
+from relatorio_app.pattern_library import select_pattern_examples
 from relatorio_app.report_engine import DEFAULT_OUTPUT_DIR, generate_report, parse_decimal_pt, parse_report_data
+from relatorio_app.ui import render_credit_report_page as render_premium_credit_report_page
+from relatorio_app.ui import render_home as render_premium_home
 
 ROOT_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = ROOT_DIR / "uploads"
@@ -42,12 +47,23 @@ class ReportHandler(BaseHTTPRequestHandler):
     server_version = "RelatorioAgronomoMVP/0.1"
 
     def do_GET(self) -> None:
-        if self.path.startswith("/outputs/"):
+        path = self.path.split("?", 1)[0]
+        if path.startswith("/outputs/"):
             self.serve_output_file()
             return
-        self.respond_html(render_home())
+        if path in ("", "/", "/index.html"):
+            self.respond_html(render_premium_home())
+            return
+        if path == "/relatorio-credito":
+            self.respond_html(render_premium_credit_report_page())
+            return
+        self.send_error(404)
 
     def do_POST(self) -> None:
+        if self.path == "/write-technical-report":
+            self.handle_write_technical_report()
+            return
+
         if self.path == "/extract":
             self.handle_extract()
             return
@@ -60,14 +76,9 @@ class ReportHandler(BaseHTTPRequestHandler):
         upload_dir = UPLOAD_DIR / run_id
         upload_dir.mkdir(parents=True, exist_ok=True)
 
-        form = cgi.FieldStorage(
-            fp=self.rfile,
-            headers=self.headers,
-            environ={
-                "REQUEST_METHOD": "POST",
-                "CONTENT_TYPE": self.headers.get("Content-Type", ""),
-            },
-        )
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        body = self.rfile.read(length)
+        form = parse_form_data(self.headers.get("Content-Type", ""), body)
 
         data_text = form.getfirst("dados", "")
         review_data = parse_review_data(form.getfirst("review_data", ""), data_text)
@@ -95,6 +106,31 @@ class ReportHandler(BaseHTTPRequestHandler):
         parsed = parse_report_data(text)
         review = build_review_payload(parsed)
         self.respond_json(review)
+
+    def handle_write_technical_report(self) -> None:
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        body = self.rfile.read(length).decode("utf-8")
+        try:
+            payload = json.loads(body or "{}")
+            raw_value = payload.get("raw_text", "")
+            if isinstance(raw_value, dict) and "value" in raw_value:
+                raw_value = raw_value["value"]
+            raw_text = str(raw_value or "")
+        except json.JSONDecodeError:
+            self.respond_json({"error": "JSON inválido."}, status=400)
+            return
+
+        if not raw_text.strip():
+            self.respond_json({"error": "Informe os dados brutos da visita."}, status=400)
+            return
+
+        writer_run = generate_technical_report_auto(raw_text)
+        result = writer_run.result
+        pattern_selection = select_pattern_examples(raw_text)
+        response = writer_run.to_payload()
+        response["pattern_library"] = pattern_selection.to_payload()
+        response["review"] = build_review_payload(parse_report_data(result.report_text))
+        self.respond_json(response)
 
     def serve_output_file(self) -> None:
         requested = unquote(self.path.removeprefix("/outputs/"))
@@ -132,21 +168,74 @@ class ReportHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def save_uploaded_files(form: cgi.FieldStorage, upload_dir: Path, field_name: str) -> list[Path]:
-    if field_name not in form:
-        return []
+@dataclass(frozen=True)
+class UploadedFile:
+    filename: str
+    content: bytes
 
-    field = form[field_name]
-    fields = field if isinstance(field, list) else [field]
+
+class ParsedForm:
+    def __init__(self) -> None:
+        self._fields: dict[str, list[str]] = {}
+        self._files: dict[str, list[UploadedFile]] = {}
+
+    def add_field(self, name: str, value: str) -> None:
+        self._fields.setdefault(name, []).append(value)
+
+    def add_file(self, name: str, uploaded_file: UploadedFile) -> None:
+        self._files.setdefault(name, []).append(uploaded_file)
+
+    def getfirst(self, name: str, default: str = "") -> str:
+        values = self._fields.get(name)
+        if not values:
+            return default
+        return values[0]
+
+    def files(self, name: str) -> list[UploadedFile]:
+        return self._files.get(name, [])
+
+
+def parse_form_data(content_type: str, body: bytes) -> ParsedForm:
+    form = ParsedForm()
+    if content_type.startswith("multipart/form-data"):
+        headers = (
+            f"Content-Type: {content_type}\r\n"
+            "MIME-Version: 1.0\r\n\r\n"
+        ).encode("utf-8")
+        message = BytesParser(policy=policy.default).parsebytes(headers + body)
+        for part in message.iter_parts():
+            if part.get_content_disposition() != "form-data":
+                continue
+            name = part.get_param("name", header="content-disposition")
+            if not name:
+                continue
+            payload = part.get_payload(decode=True) or b""
+            filename = part.get_filename()
+            if filename:
+                form.add_file(name, UploadedFile(filename=filename, content=payload))
+                continue
+            charset = part.get_content_charset() or "utf-8"
+            form.add_field(name, payload.decode(charset, errors="replace"))
+        return form
+
+    if content_type.startswith("application/x-www-form-urlencoded"):
+        decoded = body.decode("utf-8", errors="replace")
+        for name, values in parse_qs(decoded, keep_blank_values=True).items():
+            for value in values:
+                form.add_field(name, value)
+
+    return form
+
+
+def save_uploaded_files(form: ParsedForm, upload_dir: Path, field_name: str) -> list[Path]:
     saved: list[Path] = []
 
-    for index, item in enumerate(fields, start=1):
-        if not getattr(item, "filename", None):
+    for index, item in enumerate(form.files(field_name), start=1):
+        if not item.filename:
             continue
         suffix = Path(item.filename).suffix.lower() or ".jpg"
         destination = upload_dir / f"foto-{index:02d}{suffix}"
-        with destination.open("wb") as output:
-            shutil.copyfileobj(item.file, output)
+        destination.write_bytes(item.content)
         saved.append(destination)
 
     return saved
@@ -612,11 +701,404 @@ def render_home() -> str:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AgroLaudo</title>
+  <title>Central Agro</title>
+  <style>
+    :root {
+      --canopy-950: #102a22;
+      --canopy-900: #173b2c;
+      --canopy-800: #1f533b;
+      --leaf-700: #2b7a4b;
+      --leaf-600: #348e56;
+      --leaf-100: #e8f3ea;
+      --field-50: #f6f8f3;
+      --paper: #ffffff;
+      --line: #d8e1d4;
+      --text: #17231c;
+      --muted: #657568;
+      --soil: #8a6b3f;
+      --sun: #d7a83f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(180deg, rgba(232,243,234,.78), rgba(246,248,243,0) 280px),
+        var(--field-50);
+      color: var(--text);
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+    }
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 256px minmax(0, 1fr);
+    }
+    aside {
+      background: var(--canopy-950);
+      color: #edf7ef;
+      padding: 24px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 26px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 850;
+      font-size: 19px;
+      letter-spacing: 0;
+    }
+    .brand-mark {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: var(--canopy-900);
+      background: #e6f3df;
+    }
+    nav { display: grid; gap: 8px; }
+    .nav-item {
+      min-height: 42px;
+      padding: 0 12px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #d8eadc;
+      font-size: 14px;
+      text-decoration: none;
+    }
+    .nav-item.active {
+      background: #e6f3df;
+      color: var(--canopy-950);
+      font-weight: 800;
+    }
+    .side-panel {
+      margin-top: auto;
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 8px;
+      padding: 14px;
+      color: #cbded0;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    main {
+      min-width: 0;
+      padding: 30px;
+    }
+    .topbar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 24px;
+    }
+    .eyebrow {
+      color: var(--leaf-700);
+      font-weight: 850;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      margin-bottom: 8px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 32px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+    .subtitle {
+      margin: 8px 0 0;
+      max-width: 620px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .user-chip {
+      min-height: 40px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255,255,255,.78);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--canopy-900);
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .overview {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+    .metric {
+      min-height: 88px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255,255,255,.86);
+      padding: 16px;
+    }
+    .metric small {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      font-weight: 800;
+    }
+    .metric strong {
+      font-size: 22px;
+      line-height: 1.1;
+    }
+    .section-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 18px;
+      margin: 26px 0 14px;
+    }
+    h2 {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: 0;
+    }
+    .section-note {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .tools-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr);
+      gap: 16px;
+      align-items: stretch;
+    }
+    .tool-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      min-height: 260px;
+      padding: 22px;
+      display: grid;
+      align-content: space-between;
+      gap: 24px;
+      box-shadow: 0 14px 32px rgba(31,83,59,.08);
+    }
+    .tool-main {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+    }
+    .tool-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      color: var(--canopy-900);
+      background: var(--leaf-100);
+    }
+    .tool-title {
+      margin: 0;
+      font-size: 23px;
+      line-height: 1.2;
+    }
+    .tool-text {
+      margin: 8px 0 0;
+      color: var(--muted);
+      line-height: 1.5;
+      max-width: 650px;
+    }
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .tag {
+      min-height: 30px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 10px;
+      border-radius: 8px;
+      background: #f3f7f0;
+      color: var(--canopy-800);
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .tool-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .primary-action {
+      min-height: 44px;
+      padding: 0 16px;
+      border-radius: 8px;
+      border: 0;
+      background: var(--leaf-700);
+      color: #fff;
+      font-weight: 850;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .primary-action:hover { background: var(--canopy-800); }
+    .muted-action {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .roadmap {
+      border: 1px dashed #b8c8b2;
+      border-radius: 8px;
+      background: rgba(255,255,255,.58);
+      padding: 22px;
+      min-height: 260px;
+      display: grid;
+      align-content: center;
+      gap: 12px;
+    }
+    .roadmap strong {
+      font-size: 17px;
+      color: var(--canopy-900);
+    }
+    .roadmap p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 14px;
+    }
+    .leaf-line {
+      height: 4px;
+      width: 84px;
+      border-radius: 8px;
+      background: linear-gradient(90deg, var(--leaf-700), var(--sun));
+    }
+    svg { flex: 0 0 auto; }
+    @media (max-width: 900px) {
+      .shell { grid-template-columns: 1fr; }
+      aside {
+        min-height: auto;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 16px;
+      }
+      nav, .side-panel { display: none; }
+      main { padding: 22px 16px 34px; }
+      .topbar { flex-direction: column; }
+      .overview, .tools-grid { grid-template-columns: 1fr; }
+      h1 { font-size: 28px; }
+      .tool-main { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside>
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 19c8 0 13-6 13-14-8 0-13 6-13 14Z" stroke="currentColor" stroke-width="2"/><path d="M5 19c3-5 7-8 13-10" stroke="currentColor" stroke-width="2"/></svg>
+        </div>
+        Central Agro
+      </div>
+      <nav aria-label="Navegação principal">
+        <a class="nav-item active" href="/">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1v-8Z" stroke="currentColor" stroke-width="2"/></svg>
+          Início
+        </a>
+        <a class="nav-item" href="/relatorio-credito">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 3h9l3 3v15H6V3Z" stroke="currentColor" stroke-width="2"/><path d="M9 13h6M9 17h6M9 9h3" stroke="currentColor" stroke-width="2"/></svg>
+          Relatório de crédito
+        </a>
+      </nav>
+      <div class="side-panel">Ferramentas simples para organizar análise, vistoria e documentação rural.</div>
+    </aside>
+
+    <main>
+      <div class="topbar">
+        <div>
+          <div class="eyebrow">Painel de ferramentas</div>
+          <h1>Seu centro de trabalho para operações agro</h1>
+          <p class="subtitle">Escolha a ferramenta que precisa agora. A primeira entrega é o relatório de crédito rural; os próximos módulos entram aqui sem bagunçar o fluxo.</p>
+        </div>
+        <div class="user-chip" aria-label="Ambiente local">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 21s7-4.4 7-11a7 7 0 0 0-14 0c0 6.6 7 11 7 11Z" stroke="currentColor" stroke-width="2"/><path d="M12 10.5h.01" stroke="currentColor" stroke-width="3"/></svg>
+          Local
+        </div>
+      </div>
+
+      <section class="overview" aria-label="Resumo">
+        <div class="metric"><small>Ferramentas ativas</small><strong>1</strong></div>
+        <div class="metric"><small>Foco atual</small><strong>Crédito rural</strong></div>
+        <div class="metric"><small>Saída principal</small><strong>Excel</strong></div>
+      </section>
+
+      <div class="section-head">
+        <div>
+          <h2>Ferramentas</h2>
+          <div class="section-note">Acesse somente o que já está pronto para uso.</div>
+        </div>
+      </div>
+
+      <section class="tools-grid" aria-label="Ferramentas disponíveis">
+        <article class="tool-card">
+          <div class="tool-main">
+            <div class="tool-icon" aria-hidden="true">
+              <svg width="27" height="27" viewBox="0 0 24 24" fill="none"><path d="M6 3h9l3 3v15H6V3Z" stroke="currentColor" stroke-width="2"/><path d="M14 3v4h4M9 13h6M9 17h6M9 9h2" stroke="currentColor" stroke-width="2"/></svg>
+            </div>
+            <div>
+              <h3 class="tool-title">Relatório de crédito rural</h3>
+              <p class="tool-text">Cole os dados brutos da visita, gere o texto técnico no padrão do laudo, revise os campos e anexe as fotos.</p>
+              <div class="tag-row" aria-label="Características">
+                <span class="tag">Vistoria</span>
+                <span class="tag">Fotos</span>
+                <span class="tag">XLSX</span>
+              </div>
+            </div>
+          </div>
+          <div class="tool-actions">
+            <a class="primary-action" href="/relatorio-credito">
+              Abrir ferramenta
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2"/></svg>
+            </a>
+            <span class="muted-action">Texto técnico e Excel no mesmo fluxo.</span>
+          </div>
+        </article>
+
+        <aside class="roadmap" aria-label="Área para próximas ferramentas">
+          <div class="leaf-line"></div>
+          <strong>Próximas ferramentas entram neste painel</strong>
+          <p>Este espaço fica reservado para novos módulos do sistema agro, mantendo a página inicial limpa e fácil de expandir.</p>
+        </aside>
+      </section>
+    </main>
+  </div>
+</body>
+</html>"""
+
+
+def render_credit_report_page() -> str:
+    return """<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Central Agro | Relatório de crédito</title>
   <style>
     :root {
       --green-900: #173b2c;
+      --green-800: #1f533b;
       --green-700: #26734d;
+      --green-600: #338957;
       --green-100: #e7f1e8;
       --bg: #f7f9f5;
       --card: #ffffff;
@@ -635,7 +1117,7 @@ def render_home() -> str:
       font-family: Inter, "Segoe UI", Arial, sans-serif;
     }
     main {
-      width: min(1040px, calc(100vw - 32px));
+      width: min(1180px, calc(100vw - 32px));
       margin: 0 auto;
       padding: 34px 0 46px;
     }
@@ -645,6 +1127,13 @@ def render_home() -> str:
       justify-content: space-between;
       gap: 16px;
       margin-bottom: 22px;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
     }
     .brand { display: flex; align-items: center; gap: 12px; }
     .brand-icon {
@@ -658,12 +1147,49 @@ def render_home() -> str:
     }
     h1 { margin: 0; font-size: 26px; line-height: 1.2; }
     .subtitle { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+      gap: 18px;
+      align-items: start;
+    }
+    .workspace.start {
+      display: block;
+    }
+    .workspace.start > .card:first-child {
+      max-width: 760px;
+    }
     .card {
       background: var(--card);
       border: 1px solid var(--line);
       border-radius: 8px;
       padding: 22px;
     }
+    .panel-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .panel-title h2 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.25;
+    }
+    .step {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      background: var(--green-100);
+      color: var(--green-900);
+      font-weight: 900;
+      flex: 0 0 auto;
+    }
+    .output-card { display: none; }
+    .output-card.show { display: block; }
     label { display: block; font-weight: 800; margin-bottom: 8px; }
     textarea {
       width: 100%;
@@ -676,7 +1202,8 @@ def render_home() -> str:
       font: 14px/1.55 Consolas, "Courier New", monospace;
       outline-color: var(--green-700);
     }
-    #dados { min-height: 230px; }
+    #rawData { min-height: 430px; }
+    #dados { min-height: 430px; }
     .row {
       display: flex;
       align-items: center;
@@ -685,6 +1212,7 @@ def render_home() -> str:
       flex-wrap: wrap;
     }
     .actions { margin-top: 14px; }
+    .stack { display: grid; gap: 14px; }
     button {
       min-height: 44px;
       border: 0;
@@ -699,6 +1227,16 @@ def render_home() -> str:
     .primary { background: var(--green-700); color: white; }
     .primary:hover { background: var(--green-900); }
     .secondary { background: var(--green-100); color: var(--green-900); }
+    .secondary:hover { background: #dcebdd; }
+    .home-link {
+      min-height: 44px;
+      border-radius: 8px;
+      padding: 0 18px;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      text-decoration: none;
+    }
     button[disabled] { opacity: .6; cursor: wait; }
     .review {
       display: none;
@@ -717,6 +1255,11 @@ def render_home() -> str:
       border: 1px solid #f0d48a;
       font-size: 14px;
       line-height: 1.45;
+    }
+    .notice.success {
+      background: var(--green-100);
+      color: var(--green-900);
+      border-color: #b8d3bd;
     }
     .notice.show { display: block; }
     .ok-box {
@@ -776,6 +1319,7 @@ def render_home() -> str:
     @media (max-width: 760px) {
       main { width: min(100% - 24px, 1040px); padding-top: 22px; }
       header { align-items: flex-start; }
+      .workspace { grid-template-columns: 1fr; }
       .fields { grid-template-columns: 1fr; }
       .card { padding: 16px; }
       h1 { font-size: 23px; }
@@ -790,44 +1334,77 @@ def render_home() -> str:
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 19c8 0 13-6 13-14-8 0-13 6-13 14Z" stroke="currentColor" stroke-width="2"/><path d="M5 19c3-5 7-8 13-10" stroke="currentColor" stroke-width="2"/></svg>
         </div>
         <div>
-          <h1>Gerar relatório rural</h1>
-          <div class="subtitle">Cole os dados, revise a extração e baixe a planilha pronta.</div>
+          <h1>Relatório de crédito rural</h1>
+          <div class="subtitle">Cole os dados brutos da visita, gere o texto técnico e baixe a planilha pronta.</div>
         </div>
       </div>
-      <button class="secondary" type="button" id="clearBtn">Limpar</button>
+      <div class="header-actions">
+        <a class="secondary home-link" href="/">Início</a>
+        <button class="secondary" type="button" id="clearBtn">Limpar</button>
+      </div>
     </header>
 
-    <form id="reportForm" method="post" action="/generate" enctype="multipart/form-data" class="card">
-      <label for="dados">Dados enviados pelo chat</label>
-      <textarea id="dados" name="dados" placeholder="Cole aqui o texto estruturado do relatório."></textarea>
-      <div class="row actions">
-        <p class="muted">Primeiro extraia e confira os dados. Depois anexe fotos e gere o Excel.</p>
-        <button class="secondary" type="button" id="extractBtn">Extrair dados</button>
-      </div>
-
-      <section class="review" id="review">
-        <div id="okBox" class="ok-box">Dados extraídos. Revise antes de gerar.</div>
-        <div id="missingBox" class="notice"></div>
-        <div id="fields" class="fields"></div>
-
-        <div class="upload">
-          <label for="photos">Fotos da visita</label>
-          <input id="photos" name="photos" type="file" accept="image/*" multiple>
-          <span class="file-count" id="fileCount">Nenhuma foto selecionada</span>
+    <form id="reportForm" method="post" action="/generate" enctype="multipart/form-data" class="workspace start">
+      <section class="card">
+        <div class="panel-title">
+          <h2>Dados brutos da visita</h2>
+          <span class="step">1</span>
         </div>
-
-        <input type="hidden" id="reviewData" name="review_data">
-        <div class="row generate-row">
-          <button class="primary" type="submit" id="submitBtn">
+        <label for="rawData">Anotações do agrônomo</label>
+        <textarea id="rawData" placeholder="Cole aqui os dados brutos: produtor, propriedades, áreas, rebanho, lavouras, benfeitorias e maquinários."></textarea>
+        <div id="writerNotice" class="notice"></div>
+        <div class="row actions">
+          <p class="muted">O sistema transforma essas anotações em um texto técnico padronizado.</p>
+          <button class="primary" type="button" id="writeBtn" data-label="Gerar relatório técnico">
             <span class="spinner" aria-hidden="true"></span>
-            Gerar e baixar Excel
+            <span class="btn-label">Gerar relatório técnico</span>
           </button>
         </div>
+      </section>
+
+      <section class="card output-card" id="technicalSection">
+        <div class="panel-title">
+          <h2>Relatório técnico gerado</h2>
+          <span class="step">2</span>
+        </div>
+        <label for="dados">Texto técnico editável</label>
+        <textarea id="dados" name="dados" placeholder="O texto técnico gerado aparecerá aqui."></textarea>
+        <div class="row actions">
+          <p class="muted">Revise o texto. Se alterar algo, atualize os campos antes de gerar a planilha.</p>
+          <button class="secondary" type="button" id="extractBtn" data-label="Atualizar campos">
+            <span class="spinner" aria-hidden="true"></span>
+            <span class="btn-label">Atualizar campos</span>
+          </button>
+        </div>
+
+        <section class="review" id="review">
+          <div id="okBox" class="ok-box">Campos reconhecidos. Revise antes de gerar.</div>
+          <div id="missingBox" class="notice"></div>
+          <div id="fields" class="fields"></div>
+
+          <div class="upload">
+            <label for="photos">Fotos da visita</label>
+            <input id="photos" name="photos" type="file" accept="image/*" multiple>
+            <span class="file-count" id="fileCount">Nenhuma foto selecionada</span>
+          </div>
+
+          <input type="hidden" id="reviewData" name="review_data">
+          <div class="row generate-row">
+            <button class="primary" type="submit" id="submitBtn" data-label="Gerar e baixar Excel">
+              <span class="spinner" aria-hidden="true"></span>
+              <span class="btn-label">Gerar e baixar Excel</span>
+            </button>
+          </div>
+        </section>
       </section>
     </form>
   </main>
 <script>
-  const textarea = document.getElementById('dados');
+  const rawData = document.getElementById('rawData');
+  const technicalText = document.getElementById('dados');
+  const writeBtn = document.getElementById('writeBtn');
+  const writerNotice = document.getElementById('writerNotice');
+  const technicalSection = document.getElementById('technicalSection');
   const extractBtn = document.getElementById('extractBtn');
   const review = document.getElementById('review');
   const fieldsEl = document.getElementById('fields');
@@ -841,24 +1418,92 @@ def render_home() -> str:
   let lastExtraction = null;
 
   document.getElementById('clearBtn').addEventListener('click', () => {
-    textarea.value = '';
+    rawData.value = '';
+    technicalText.value = '';
     fieldsEl.innerHTML = '';
     review.classList.remove('show');
+    technicalSection.classList.remove('show');
+    form.classList.add('start');
+    writerNotice.className = 'notice';
+    writerNotice.textContent = '';
     reviewData.value = '';
     lastExtraction = null;
     if (fileInput) fileInput.value = '';
     if (fileCount) fileCount.textContent = 'Nenhuma foto selecionada';
-    textarea.focus();
+    rawData.focus();
   });
 
-  extractBtn.addEventListener('click', async () => {
-    const dados = textarea.value.trim();
-    if (!dados) {
-      textarea.focus();
+  function setBusy(button, busy, label) {
+    button.disabled = busy;
+    const text = button.querySelector('.btn-label');
+    if (text) text.textContent = busy ? label : button.dataset.label;
+  }
+
+  writeBtn.addEventListener('click', async () => {
+    const rawText = rawData.value.trim();
+    if (!rawText) {
+      rawData.focus();
       return;
     }
-    extractBtn.disabled = true;
-    extractBtn.textContent = 'Extraindo';
+    setBusy(writeBtn, true, 'Gerando');
+    writerNotice.className = 'notice';
+    writerNotice.textContent = '';
+    try {
+      const response = await fetch('/write-technical-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ raw_text: rawText })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Não consegui gerar o texto técnico.');
+      technicalText.value = payload.report_text || '';
+      technicalSection.classList.add('show');
+      form.classList.remove('start');
+      renderFields(payload.review);
+      renderWriterNotice(payload.writer);
+      review.classList.add('show');
+      technicalSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (error) {
+      writerNotice.className = 'notice';
+      writerNotice.textContent = error.message;
+      writerNotice.classList.add('show');
+    } finally {
+      setBusy(writeBtn, false, '');
+    }
+  });
+
+  extractBtn.addEventListener('click', refreshFieldsFromTechnicalText);
+
+  function renderWriterNotice(writer) {
+    if (!writer) return;
+    writerNotice.className = 'notice';
+    if (writer.used_ai) {
+      writerNotice.textContent = `Texto gerado com Gemini (${writer.model}).`;
+      writerNotice.classList.add('success', 'show');
+      return;
+    }
+    writerNotice.textContent = writer.fallback_reason
+      ? `Texto gerado pelo modo local. ${writer.fallback_reason}`
+      : 'Texto gerado pelo modo local.';
+    writerNotice.classList.add('show');
+  }
+
+  technicalText.addEventListener('input', () => {
+    reviewData.value = '';
+    lastExtraction = null;
+    fieldsEl.innerHTML = '';
+    missingBox.textContent = 'Texto alterado. Atualize os campos antes de gerar a planilha.';
+    missingBox.classList.add('show');
+    review.classList.add('show');
+  });
+
+  async function refreshFieldsFromTechnicalText() {
+    const dados = technicalText.value.trim();
+    if (!dados) {
+      technicalText.focus();
+      return false;
+    }
+    setBusy(extractBtn, true, 'Atualizando');
     try {
       const response = await fetch('/extract', {
         method: 'POST',
@@ -866,22 +1511,23 @@ def render_home() -> str:
         body: JSON.stringify({ dados })
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'Não consegui extrair.');
-      lastExtraction = payload;
+      if (!response.ok) throw new Error(payload.error || 'Não consegui atualizar os campos.');
       renderFields(payload);
       review.classList.add('show');
-      review.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return true;
     } catch (error) {
       missingBox.textContent = error.message;
       missingBox.classList.add('show');
       review.classList.add('show');
+      return false;
     } finally {
-      extractBtn.disabled = false;
-      extractBtn.textContent = 'Extrair dados';
+      setBusy(extractBtn, false, '');
     }
-  });
+  }
 
   function renderFields(payload) {
+    if (!payload) return;
+    lastExtraction = payload;
     fieldsEl.innerHTML = '';
     okBox.textContent = `${payload.summary.found} campos encontrados. Revise e ajuste se precisar.`;
     if (payload.missing.length) {
@@ -931,16 +1577,20 @@ def render_home() -> str:
     fileCount.textContent = total === 1 ? '1 foto selecionada' : `${total} fotos selecionadas`;
   });
 
-  form.addEventListener('submit', (event) => {
+  form.addEventListener('submit', async (event) => {
+    if (!technicalText.value.trim()) {
+      event.preventDefault();
+      writeBtn.click();
+      return;
+    }
     if (!reviewData.value) {
       event.preventDefault();
-      extractBtn.click();
+      await refreshFieldsFromTechnicalText();
       return;
     }
     syncReviewData();
-    submitBtn.disabled = true;
-    submitBtn.lastChild.textContent = ' Gerando';
-    setTimeout(() => { submitBtn.disabled = false; submitBtn.lastChild.textContent = ' Gerar e baixar Excel'; }, 5000);
+    setBusy(submitBtn, true, 'Gerando');
+    setTimeout(() => { setBusy(submitBtn, false, ''); }, 5000);
   });
 </script>
 </body>

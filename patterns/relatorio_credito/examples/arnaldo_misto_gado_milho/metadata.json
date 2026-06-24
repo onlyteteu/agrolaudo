@@ -1,0 +1,18 @@
+{
+  "id": "arnaldo_misto_gado_milho",
+  "title": "Misto com pecuária, milho, espólio, arrendamento e turismo rural",
+  "approved": false,
+  "raw_path": "sample_raw_arnaldo.txt",
+  "tags": [
+    "pecuaria_corte",
+    "milho",
+    "confinamento",
+    "multi_propriedades",
+    "espolio",
+    "arrendada",
+    "turismo_rural",
+    "maquinarios",
+    "energia_solar"
+  ],
+  "notes": "Exemplo semente criado a partir dos dados brutos do Arnaldo. Deve receber expected.txt aprovado quando o padrão final estiver validado."
+}

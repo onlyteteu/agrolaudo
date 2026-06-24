@@ -7,6 +7,10 @@ env/
 
 node_modules/
 
+.env
+.env.*
+!.env.example
+
 outputs/
 uploads/
 

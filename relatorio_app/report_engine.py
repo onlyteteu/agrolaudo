@@ -131,6 +131,7 @@ def parse_narrative_report(text: str) -> dict[str, Any]:
         r"OUTROS COMENTÁRIOS|OUTROS COMENTARIOS",
         r"CONCLUSÃO|CONCLUSAO",
         r"FRASES DIRETAS",
+        r"Dados\s+de\s+(?:Área|Area)\s+e\s+(?:Exploração|Exploracao)",
     ]
     stop_pattern = "|".join([rf"(?:{pattern})\s*:" for pattern in label_patterns] + section_patterns)
 
@@ -518,7 +519,7 @@ def parse_compact_property_area_section(section: str) -> list[dict[str, Any]]:
     crop_label = r"(?:Área|Ãrea|Area)\s+de\s+Cultivo\s*\(ha\)\s*:"
     activity_label = r"Atividade\s+principal\s+desenvolvida\s*:"
     cultures_label = r"Principais\s+culturas\s*:"
-    property_heading = r"(?:Fazenda|S[ií]tio|Sitio|Ch[aá]cara|Chacara|Grupo|Unidade)\s+"
+    property_heading = r"(?:Fazenda|S[ií]tio|Sitio|Ch[aá]cara|Chacara|Grupo|Unidade|Propriedade)\s+"
     next_property = rf"(?=\s*{property_heading}.{{2,180}}?{area_label}|$)"
     pattern = re.compile(
         rf"\s*(?P<name>{property_heading}.+?)\s*{area_label}\s*(?P<total>.*?)\s*"
@@ -560,7 +561,7 @@ def parse_unit_detail_sections(text: str) -> list[dict[str, Any]]:
         return []
 
     pattern = re.compile(
-        r"(?P<name>(?:Fazenda|S[iÃ­]tio|Sitio|Ch[aÃ¡]cara|Chacara|Grupo|Unidade)\s+.+?)\s*:\s*"
+        r"(?P<name>(?:Fazenda|S[iÃ­]tio|Sitio|Ch[aÃ¡]cara|Chacara|Grupo|Unidade|Propriedade)\s+.+?)\s*:\s*"
         r"(?P<total>\d[\d.,]*)\s*ha\s+brutos?\s*/\s*"
         r"(?P<pasture>\d[\d.,]*)\s*ha\s+de\s+pastagens",
         flags=re.IGNORECASE,
@@ -1108,6 +1109,14 @@ def clear_variable_model_values(worksheet: Worksheet, row_offset: int = 0) -> No
     for cell in ["A27", "A30", "A32", "A33", "F27", "G27", "H27", "I27", "F30", "G30", "H30", "I30", "F32", "G32", "H32", "I32"]:
         set_cell(worksheet, shifted_coordinate(cell, row_offset), None)
 
+    for row in range(34, 41):
+        for col in range(1, 12):
+            set_cell(worksheet, f"{get_column_letter(col)}{shifted_row(row, row_offset)}", None)
+
+    for row in range(46, EQUIPMENT_START_ROW):
+        for col in range(1, 14):
+            set_cell(worksheet, f"{get_column_letter(col)}{shifted_row(row, row_offset)}", None)
+
     clear_equipment_rows(worksheet, row_offset)
     clear_yes_no_area(worksheet, INSUMO_ROWS.values(), "E", "F", "G", row_offset)
     clear_yes_no_area(worksheet, PERSPECTIVA_ROWS.values(), "F", "G", "H", row_offset)
@@ -1407,8 +1416,9 @@ def top_left_for_merged_cell(worksheet: Worksheet, coordinate: str) -> str:
 
 def clear_equipment_rows(worksheet: Worksheet, row_offset: int = 0) -> None:
     rows = [40, *range(EQUIPMENT_START_ROW, EQUIPMENT_END_ROW + 2)]
-    for row in rows:
-        shifted = shifted_row(row, row_offset)
+    rows_to_clear = {row for row in rows}
+    rows_to_clear.update(shifted_row(row, row_offset) for row in rows)
+    for shifted in rows_to_clear:
         for col in EQUIPMENT_COLUMNS.values():
             set_cell(worksheet, f"{col}{shifted}", None)
 

@@ -19,6 +19,24 @@ Depois acesse:
 http://127.0.0.1:8000
 ```
 
+## Configurar Gemini
+
+Crie um arquivo `.env` na raiz do projeto, ao lado do `server.py`, usando `.env.example` como base:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Edite o `.env` e coloque sua chave do Google AI Studio:
+
+```text
+GEMINI_API_KEY=sua_chave_aqui
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_TIMEOUT_SECONDS=45
+```
+
+Depois reinicie o servidor. Se `GEMINI_API_KEY` não estiver configurada, o sistema usa o gerador local como fallback.
+
 ## Gerar pela linha de comando
 
 ```powershell

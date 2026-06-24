@@ -1,0 +1,24 @@
+{
+  "id": "divino_piscicultura_pecuaria",
+  "title": "Divino Oliveira Camargo - piscicultura com pecuária em área própria e alugada",
+  "approved": true,
+  "combined_path": "source.txt",
+  "final_workbook_path": "final.xlsx",
+  "tags": [
+    "piscicultura",
+    "peixes",
+    "tambaqui",
+    "caranha",
+    "piau",
+    "tanques",
+    "pecuaria_corte",
+    "engorda",
+    "arrendada",
+    "area_alugada",
+    "pastagens",
+    "brachiaria",
+    "propriedade_pequena",
+    "diversificacao"
+  ],
+  "notes": "Caso aprovado com dupla aptidão: piscicultura em tanques escavados e engorda de bovinos Nelore em propriedade própria mais área alugada."
+}

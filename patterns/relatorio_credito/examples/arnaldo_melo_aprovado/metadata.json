@@ -1,0 +1,21 @@
+{
+  "id": "arnaldo_melo_aprovado",
+  "title": "Arnaldo Moreira de Melo - operação verticalizada com confinamento e milho",
+  "approved": true,
+  "combined_path": "source.txt",
+  "final_workbook_path": "final.xlsx",
+  "tags": [
+    "pecuaria_corte",
+    "milho",
+    "confinamento",
+    "multi_propriedades",
+    "espolio",
+    "arrendada",
+    "turismo_rural",
+    "maquinarios",
+    "energia_solar",
+    "fabrica_racao",
+    "verticalizada"
+  ],
+  "notes": "Caso aprovado pelo usuário com dados brutos, resposta Gemini e planilha final. Usar como referência forte para operações integradas com confinamento, lavoura de milho, energia solar, fábrica de ração e maquinários."
+}

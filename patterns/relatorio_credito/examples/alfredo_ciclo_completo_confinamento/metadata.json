@@ -1,0 +1,26 @@
+{
+  "id": "alfredo_ciclo_completo_confinamento",
+  "title": "Alfredo Valente - pecuária de ciclo completo com confinamento de seca",
+  "approved": true,
+  "combined_path": "source.txt",
+  "final_workbook_path": "final.xlsx",
+  "tags": [
+    "pecuaria_corte",
+    "ciclo_completo",
+    "cria",
+    "recria",
+    "engorda",
+    "confinamento",
+    "confinamento_seca",
+    "arrendada",
+    "pastagens",
+    "brachiaria",
+    "mombaca",
+    "andropogon",
+    "piquetes",
+    "cochos_cobertos",
+    "bebedouros",
+    "benfeitorias_pecuarias"
+  ],
+  "notes": "Caso aprovado para pecuária tecnificada com área própria e arrendada, 25 piquetes, cochos cobertos, bebedouros e confinamento estratégico na seca."
+}

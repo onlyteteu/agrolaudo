@@ -1,0 +1,27 @@
+{
+  "id": "socrates_pecuaria_duas_unidades",
+  "title": "Guilhermo Sócrates - duas unidades com piquetes, água e confinamento",
+  "approved": true,
+  "combined_path": "source.txt",
+  "final_workbook_path": "final.xlsx",
+  "tags": [
+    "pecuaria_corte",
+    "cria",
+    "recria",
+    "engorda",
+    "confinamento",
+    "rotacionado",
+    "multi_propriedades",
+    "duas_cidades",
+    "pastagens",
+    "brachiaria",
+    "piquetes",
+    "cochos_cobertos",
+    "bebedouros",
+    "casa_sede",
+    "casas_funcionarios",
+    "poco_artesiano",
+    "recursos_hidricos"
+  ],
+  "notes": "Caso aprovado para duas propriedades em municípios distintos, com estrutura hídrica forte, piquetes, casas, pastejo rotacionado e confinamento."
+}
