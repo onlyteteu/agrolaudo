@@ -282,8 +282,8 @@ def main() -> None:
     assert_equal(sandro_worksheet["D22"].value, 821.0, "sandro area quinta propriedade")
     assert_equal(sandro_worksheet["A24"].value, "3        BENFEITORIAS", "sandro secao benfeitorias deslocada")
     assert_equal(sandro_worksheet["A28"].value, "O complexo pecuario apresenta infraestrutura integrada e alto padrao tecnico.", "sandro texto benfeitorias deslocado")
-    assert_equal(sandro_worksheet["D94"].value, "Projeto com cinco unidades produtivas e manejo integrado.", "sandro investimentos deslocado")
-    assert_equal(sandro_worksheet["D106"].value, "COMPLEXO PECUARIO COM CINCO UNIDADES PRODUTIVAS INTEGRADAS.", "sandro frase direta deslocada")
+    assert_equal(sandro_worksheet["D97"].value, "Projeto com cinco unidades produtivas e manejo integrado.", "sandro investimentos deslocado")
+    assert_equal(sandro_worksheet["D109"].value, "COMPLEXO PECUARIO COM CINCO UNIDADES PRODUTIVAS INTEGRADAS.", "sandro frase direta deslocada")
 
     collapsed = parse_report_data(COLLAPSED_PROPERTY_TEXT)
     assert_equal(collapsed.get("imovel_nome"), "Fazenda Beira Rio; Fazenda Val da Onca", "texto colado nomes limpos")
@@ -306,9 +306,28 @@ def main() -> None:
     benfeitoria_output = generate_report(BENFEITORIA_SPLIT_TEXT, output_path=OUTPUT_DIR / "benfeitorias-em-caixas.xlsx")
     benfeitoria_worksheet = load_workbook(benfeitoria_output).active
     assert_equal(benfeitoria_worksheet["B4"].value, "Sandro Mabel", "cliente escrito somente como nome")
-    assert_equal(benfeitoria_worksheet["A27"].value.startswith("O complexo pecuario"), True, "benfeitorias bloco introdutorio")
-    assert_equal(benfeitoria_worksheet["A30"].value.startswith("Na Fazenda Boa Sorte"), True, "benfeitorias primeira fazenda")
-    assert_equal(benfeitoria_worksheet["A32"].value.startswith("Na Fazenda Sao Judas"), True, "benfeitorias segunda fazenda")
+    assert_equal(benfeitoria_worksheet["A27"].value.startswith("Na Fazenda Boa Sorte"), True, "benfeitorias primeira fazenda")
+    assert_equal(benfeitoria_worksheet["A30"].value.startswith("Na Fazenda Sao Judas"), True, "benfeitorias segunda fazenda")
+    assert_equal(
+        "complexo pecuario" in (benfeitoria_worksheet["B184"].value or "").lower(),
+        True,
+        "visao geral das benfeitorias em outros comentarios",
+    )
+
+    manual_text = (
+        "Cliente: Maria Souza\n"
+        "Data da visita: 15/06/2026\n"
+        "Maquinarios: Trator Massey Ferguson 4292; Grade aradora 16 discos\n"
+    )
+    manual_output = generate_report(manual_text, output_path=OUTPUT_DIR / "manual-data-maquinas.xlsx")
+    manual_worksheet = load_workbook(manual_output).active
+    assert_equal(manual_worksheet["J4"].value, "Data da Visita:15/06/2026", "data da visita preenchida")
+    assert_equal(manual_worksheet["A195"].value, "Data: 15/06/2026", "data assinatura preenchida")
+    assert_equal(manual_worksheet["A204"].value, "Data: 15/06/2026", "data administracao preenchida")
+    assert_equal(manual_worksheet["A207"].value, "DATA DA VISITA: 15/06/2026", "data rodape preenchida")
+    assert_equal(manual_worksheet["A51"].value, "Trator Massey Ferguson 4292", "maquinario primeira linha")
+    assert_equal(manual_worksheet["A52"].value, "Grade aradora 16 discos", "maquinario segunda linha")
+    assert_equal(manual_worksheet["A51"].alignment.horizontal, "left", "maquinario alinhado a esquerda")
 
     photo_output = generate_report(
         CASES[0]["source"].read_text(encoding="utf-8"),
@@ -321,13 +340,13 @@ def main() -> None:
         for image in photo_worksheet._images
         if getattr(getattr(image, "anchor", None), "_from", None) is not None and int(image.anchor._from.row) + 1 >= 200
     ]
-    assert_equal(report_photo_rows, [210, 229, 248], "posicao das fotos inseridas")
-    assert_equal(photo_worksheet["D209"].value, "Foto 01", "legenda primeira foto")
-    assert_equal(photo_worksheet["D228"].value, "Foto 02", "legenda segunda foto")
-    assert_equal(photo_worksheet["D209"].border.top.style, "medium", "borda superior primeira foto")
-    assert_equal(photo_worksheet["D209"].border.left.style, "medium", "borda esquerda primeira foto")
-    assert_equal(photo_worksheet["J226"].border.right.style, "medium", "borda direita primeira foto")
-    assert_equal(photo_worksheet["J226"].border.bottom.style, "medium", "borda inferior primeira foto")
+    assert_equal(report_photo_rows, [213, 232, 251], "posicao das fotos inseridas")
+    assert_equal(photo_worksheet["D212"].value, "Foto 01", "legenda primeira foto")
+    assert_equal(photo_worksheet["D231"].value, "Foto 02", "legenda segunda foto")
+    assert_equal(photo_worksheet["D212"].border.top.style, "medium", "borda superior primeira foto")
+    assert_equal(photo_worksheet["D212"].border.left.style, "medium", "borda esquerda primeira foto")
+    assert_equal(photo_worksheet["K229"].border.right.style, "medium", "borda direita primeira foto")
+    assert_equal(photo_worksheet["K229"].border.bottom.style, "medium", "borda inferior primeira foto")
     prepared_photo = OUTPUT_DIR / "fotos-com-moldura-images" / "foto-01.jpg"
     with Image.open(prepared_photo) as image:
         assert_equal(image.size, (520, 330), "tamanho da foto preparada")
@@ -335,6 +354,23 @@ def main() -> None:
         right_edge = [image.getpixel((image.width - 1, y)) for y in range(image.height)]
         if all(pixel == (255, 255, 255) for pixel in left_edge + right_edge):
             raise AssertionError("foto preparada contem faixa branca lateral")
+
+    coordinate_photo = OUTPUT_DIR / "foto-com-coordenada.jpg"
+    marker = Image.new("RGB", (640, 480), "white")
+    for x in range(40):
+        for y in range(40):
+            marker.putpixel((x, y), (255, 0, 0))
+    marker.save(coordinate_photo)
+    generate_report(
+        CASES[0]["source"].read_text(encoding="utf-8"),
+        [coordinate_photo],
+        OUTPUT_DIR / "foto-coordenada-preservada.xlsx",
+    )
+    prepared_coordinate_photo = OUTPUT_DIR / "foto-coordenada-preservada-images" / "foto-01.jpg"
+    with Image.open(prepared_coordinate_photo) as image:
+        red, green, blue = image.getpixel((0, 0))
+        if not (red > 150 and green < 90 and blue < 90):
+            raise AssertionError("canto superior esquerdo da foto foi cortado")
 
     for case in CASES:
         text = case["source"].read_text(encoding="utf-8")

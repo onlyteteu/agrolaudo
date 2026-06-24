@@ -138,6 +138,10 @@ def parse_narrative_report(text: str) -> dict[str, Any]:
         value = extract_after_label(compact, label_pattern, stop_pattern)
         if value:
             data[field] = value
+    if not data.get("data_visita"):
+        visit_date = extract_visit_date(compact)
+        if visit_date:
+            data["data_visita"] = visit_date
 
     explicit_property_summary = data.get("imovel_nome")
     structured_properties = parse_property_area_sections(text)
@@ -181,13 +185,15 @@ def parse_narrative_report(text: str) -> dict[str, Any]:
     if not data.get("atividade_principal") and data.get("atividades_desenvolvidas"):
         data["atividade_principal"] = data["atividades_desenvolvidas"]
 
+    benfeitorias_geral = None
     benfeitorias = extract_section(
         compact,
         r"\d+\.\s*TIPO\s*\(Benfeitorias e Infraestrutura\)",
         [r"\d+\.\s*DESCRIÇÃO", r"\d+\.\s*DESCRICAO", r"INVESTIMENTOS EM ANDAMENTO"],
     )
     if benfeitorias:
-        data["benfeitorias_descricao"] = benfeitorias
+        benfeitorias_propriedades, benfeitorias_geral = split_benfeitorias_property_scope(benfeitorias)
+        data["benfeitorias_descricao"] = benfeitorias_propriedades or benfeitorias
         data.setdefault("benfeitorias_conservacao", "BOM")
         data.setdefault(
             "benfeitorias_observacoes",
@@ -217,6 +223,8 @@ def parse_narrative_report(text: str) -> dict[str, Any]:
     )
     if outros:
         data["outros_comentarios"] = outros
+    if benfeitorias_geral:
+        data["outros_comentarios"] = append_comment(data.get("outros_comentarios"), benfeitorias_geral)
 
     conclusao = extract_section(
         compact,
@@ -284,6 +292,28 @@ def extract_section(text: str, start_pattern: str, end_patterns: list[str]) -> s
         flags=re.IGNORECASE,
     )
     return clean_text_value(match.group(1)) if match else None
+
+
+def extract_visit_date(text: str) -> str | None:
+    patterns = [
+        r"(?:Data\s+da\s+visita|Data\s+de\s+visita|Data)\s*:?\s*(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4})",
+        r"(?:visita\s+(?:realizada|efetuada)\s+em)\s*:?\s*(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4})",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return match.group(1)
+    return None
+
+
+def append_comment(existing: Any, addition: str) -> str:
+    current = normalize_spaces(str(existing or ""))
+    extra = normalize_spaces(addition)
+    if not current:
+        return extra
+    if normalize_key(extra) in normalize_key(current):
+        return current
+    return f"{current}\n{extra}"
 
 
 def parse_decimal_pt(value: Any) -> float | Any:
@@ -745,7 +775,37 @@ def parse_equipment_section(section: str) -> list[dict[str, Any]]:
                 "outras_informacoes": "",
             }
         ]
+    cleaned = clean_equipment_description(section)
+    if cleaned:
+        items = [part.strip(" .;:-") for part in re.split(r"\s*;\s*", cleaned) if part.strip(" .;:-")]
+        if not items:
+            items = [cleaned]
+        return [
+            {
+                "descricao": item,
+                "fabricante": "-",
+                "modelo": "-",
+                "estado": "BOM",
+                "financiado_bb": "NÃO",
+                "financiado_outros": "NÃO",
+                "segurado": "NÃO",
+                "gravame": "NÃO",
+                "outras_informacoes": "",
+            }
+            for item in items
+        ]
     return []
+
+
+def clean_equipment_description(value: Any) -> str:
+    text = normalize_spaces(str(value or ""))
+    text = re.sub(r"^(?:Descri[cç][aã]o|Descricao)\s*:\s*", "", text, flags=re.IGNORECASE)
+    return text.strip(" .;:-")
+
+
+def normalize_date_text(value: Any) -> Any:
+    match = re.search(r"\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}", str(value))
+    return match.group(0) if match else value
 
 
 def normalize_data(data: dict[str, Any]) -> dict[str, Any]:
@@ -767,6 +827,14 @@ def normalize_data(data: dict[str, Any]) -> dict[str, Any]:
             normalized["cliente"] = cleaned_client
         elif len(str(normalized["cliente"])) > 80:
             normalized.pop("cliente", None)
+
+    if normalized.get("data_visita"):
+        normalized["data_visita"] = normalize_date_text(normalized["data_visita"])
+        normalized.setdefault("data_assinatura", normalized["data_visita"])
+        normalized.setdefault("data_administracao", normalized["data_visita"])
+
+    if isinstance(normalized.get("equipamentos"), str):
+        normalized["equipamentos"] = parse_equipment_section(str(normalized["equipamentos"]))
 
     property_items = normalize_property_items(normalized.get("imoveis"))
     property_names = property_names_from_value(property_items)
@@ -878,16 +946,27 @@ def split_benfeitoria_blocks(value: Any) -> list[str]:
         return [text]
 
     blocks: list[str] = []
-    intro = text[: matches[0].start()].strip()
-    if intro:
-        blocks.append(intro)
-
     for index, match in enumerate(matches):
         end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
         block = text[match.start() : end].strip()
         if block:
             blocks.append(block)
     return blocks
+
+
+def split_benfeitorias_property_scope(value: Any) -> tuple[str, str | None]:
+    text = normalize_spaces(str(value or ""))
+    if not text:
+        return "", None
+
+    start_pattern = r"\b(?:Na|No)\s+(?:Fazenda|Unidade|Grupo|S[iÃ­]tio|Ch[aÃ¡]cara)\b"
+    matches = list(re.finditer(start_pattern, text))
+    if not matches:
+        return text, None
+
+    general = text[: matches[0].start()].strip(" .;:-")
+    property_text = text[matches[0].start() :].strip()
+    return property_text, general or None
 
 
 def prepare_benfeitoria_rows(worksheet: Worksheet, blocks: list[str], property_offset: int = 0) -> int:
@@ -1023,7 +1102,7 @@ def shifted_row(row: int, row_offset: int, start_row: int = PROPERTY_SHIFT_START
 
 
 def clear_variable_model_values(worksheet: Worksheet, row_offset: int = 0) -> None:
-    for cell in ["B4", *FIELD_TO_CELL.values(), *(cell for cell, _ in DATE_FIELDS.values())]:
+    for cell in ["B4", "A207", *FIELD_TO_CELL.values(), *(cell for cell, _ in DATE_FIELDS.values())]:
         set_cell(worksheet, shifted_coordinate(cell, row_offset), None)
 
     for cell in ["A27", "A30", "A32", "A33", "F27", "G27", "H27", "I27", "F30", "G30", "H30", "I30", "F32", "G32", "H32", "I32"]:
@@ -1164,6 +1243,8 @@ def apply_fields(worksheet: Worksheet, data: dict[str, Any], row_offset: int = 0
         if value not in (None, ""):
             offset = offset_for_coordinate(cell, row_offset, below_benfeitoria_offset)
             set_cell(worksheet, shifted_coordinate(cell, offset), pattern.format(value))
+    if data.get("data_visita") not in (None, ""):
+        set_cell(worksheet, shifted_coordinate("A207", below_benfeitoria_offset), f"DATA DA VISITA: {data['data_visita']}")
 
     if data.get("raw_text") and not data.get("outros_comentarios"):
         set_cell(worksheet, shifted_coordinate("B181", below_benfeitoria_offset), data["raw_text"])
@@ -1285,7 +1366,15 @@ def parse_bool(value: Any) -> bool | None:
 
 def set_cell(worksheet: Worksheet, coordinate: str, value: Any) -> None:
     target = top_left_for_merged_cell(worksheet, coordinate)
-    worksheet[target] = value
+    cell = worksheet[target]
+    cell.value = value
+    if value not in (None, ""):
+        cell.alignment = copy(cell.alignment)
+        cell.alignment = Alignment(
+            horizontal="left",
+            vertical=cell.alignment.vertical or "center",
+            wrap_text=cell.alignment.wrap_text,
+        )
 
 
 def set_mark(worksheet: Worksheet, coordinate: str, enabled: bool) -> None:
@@ -1372,12 +1461,12 @@ def polish_written_ranges(worksheet: Worksheet, row_offset: int = 0, below_benfe
         "K18",
         "A27",
         "I27",
-        "D93",
-        "D105",
-        "D129",
-        "B144",
-        "B181",
-        "B190",
+        "D96",
+        "D108",
+        "D132",
+        "B147",
+        "B184",
+        "B193",
     ]
     for coordinate in wrap_cells:
         offset = offset_for_coordinate(coordinate, row_offset, below_benfeitoria_offset)
@@ -1504,7 +1593,7 @@ def prepare_photo(photo_path: Path, output_dir: Path, index: int) -> Path:
     output_path = output_dir / f"foto-{index:02d}.jpg"
     with Image.open(photo_path) as original:
         image = ImageOps.exif_transpose(original).convert("RGB")
-        fitted = ImageOps.fit(image, PHOTO_MAX_SIZE, method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+        fitted = image.resize(PHOTO_MAX_SIZE, Image.Resampling.LANCZOS)
         fitted.save(output_path, quality=88, optimize=True)
     return output_path
 
