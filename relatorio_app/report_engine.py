@@ -36,8 +36,6 @@ from .field_mapping import (
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_TEMPLATE = ROOT_DIR / "templates" / "relatorio-modelo.xlsx"
 DEFAULT_OUTPUT_DIR = ROOT_DIR / "outputs"
-PHOTO_CAPTION_FILL = PatternFill("solid", fgColor="E7F1E8")
-PHOTO_FRAME_SIDE = Side(style="medium", color="5A6F5B")
 PROPERTY_START_ROW = 18
 PROPERTY_TEMPLATE_END_ROW = 21
 PROPERTY_INSERT_AT_ROW = 22
@@ -1563,23 +1561,9 @@ def format_photo_slot(worksheet: Worksheet, number: int, from_row: int, from_col
     caption_cell.alignment = Alignment(horizontal="left", vertical="center")
     worksheet.row_dimensions[start_row].height = max(18, worksheet.row_dimensions[start_row].height or 0)
 
-    for col in range(start_col, end_col + 1):
-        worksheet.cell(row=start_row, column=col).fill = copy(PHOTO_CAPTION_FILL)
-
-    apply_range_border(worksheet, start_row, start_col, end_row, end_col)
-
-
-def apply_range_border(worksheet: Worksheet, start_row: int, start_col: int, end_row: int, end_col: int) -> None:
     for row in range(start_row, end_row + 1):
         for col in range(start_col, end_col + 1):
-            cell = worksheet.cell(row=row, column=col)
-            current = copy(cell.border)
-            cell.border = Border(
-                left=PHOTO_FRAME_SIDE if col == start_col else current.left,
-                right=PHOTO_FRAME_SIDE if col == end_col else current.right,
-                top=PHOTO_FRAME_SIDE if row == start_row else current.top,
-                bottom=PHOTO_FRAME_SIDE if row == end_row else current.bottom,
-            )
+            worksheet.cell(row=row, column=col).border = Border()
 
 
 def remove_old_report_photos(worksheet: Worksheet) -> None:
