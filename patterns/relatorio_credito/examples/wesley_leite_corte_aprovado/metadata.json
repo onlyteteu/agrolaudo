@@ -1,0 +1,16 @@
+{
+  "id": "wesley_leite_corte_aprovado",
+  "title": "Wesley Paulo - pecuaria mista com leite e recria de corte",
+  "approved": true,
+  "combined_path": "source.txt",
+  "tags": [
+    "pecuaria_mista",
+    "leite",
+    "pecuaria_corte",
+    "recria",
+    "pastagens",
+    "propriedade_unica",
+    "baixo_detalhamento"
+  ],
+  "notes": "Caso aprovado para dados brutos curtos, com leite, novilhas de corte e texto tecnico mais desenvolvido sem inventar estrutura nao informada."
+}

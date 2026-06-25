@@ -75,13 +75,20 @@ def classify_case_tags(raw_text: str) -> tuple[str, ...]:
         tags.add("confinamento")
     if "seca" in normalized_text and "confinamento" in normalized_text:
         tags.add("confinamento_seca")
-    if "cria" in normalized_text:
+    if has_normalized_token(normalized_text, "cria"):
         tags.add("cria")
-    if "recria" in normalized_text:
+    if has_normalized_token(normalized_text, "recria"):
         tags.add("recria")
-    if "engorda" in normalized_text:
+    if has_normalized_token(normalized_text, "engorda"):
         tags.add("engorda")
-    if "cria_recria_engorda" in normalized_text or ("cria" in normalized_text and "recria" in normalized_text and "engorda" in normalized_text):
+    if (
+        "cria_recria_engorda" in normalized_text
+        or (
+            has_normalized_token(normalized_text, "cria")
+            and has_normalized_token(normalized_text, "recria")
+            and has_normalized_token(normalized_text, "engorda")
+        )
+    ):
         tags.add("ciclo_completo")
     if "solar" in normalized_text or "placa" in normalized_text:
         tags.add("energia_solar")
@@ -113,7 +120,16 @@ def classify_case_tags(raw_text: str) -> tuple[str, ...]:
         tags.add("recursos_hidricos")
     if "rotacionado" in normalized_text:
         tags.add("rotacionado")
-    if "casa_funcionarios" in normalized_text or "casas_funcionarios" in normalized_text:
+    if "nelore" in normalized_text:
+        tags.add("nelore")
+    if "silagem" in normalized_text:
+        tags.add("silagem")
+    if "ceasa" in normalized_text:
+        tags.add("ceasa")
+        tags.add("escoamento")
+    if "galpao" in normalized_text or "galpao" in normalized_text:
+        tags.add("galpao")
+    if "casa_funcionarios" in normalized_text or "casas_funcionarios" in normalized_text or "caseiro" in normalized_text:
         tags.add("casas_funcionarios")
     if "casa_propria" in normalized_text or "casa_sede" in normalized_text:
         tags.add("casa_sede")
@@ -121,6 +137,8 @@ def classify_case_tags(raw_text: str) -> tuple[str, ...]:
         tags.add("projetos_futuros")
     if "reforma_de_pastagem" in normalized_text or "reforma_pastagem" in normalized_text:
         tags.add("reforma_pastagem")
+    if "reforma_de_cerca" in normalized_text or "reforma_cerca" in normalized_text:
+        tags.add("reforma_cerca")
     if "aquisicao_de_gado" in normalized_text or "aquisição_de_gado" in normalized_text or "aquisicao_animais" in normalized_text:
         tags.add("aquisicao_animais")
     if len(raw_text.strip()) < 700:
@@ -151,6 +169,10 @@ def classify_case_tags(raw_text: str) -> tuple[str, ...]:
         tags.add("mombaca")
 
     return tuple(sorted(tags))
+
+
+def has_normalized_token(normalized_text: str, token: str) -> bool:
+    return token in normalized_text.split("_")
 
 
 def count_property_mentions(raw_text: str) -> int:
@@ -292,12 +314,29 @@ def select_pattern_examples(raw_text: str, limit: int = 3) -> PatternSelection:
 def build_writer_prompt(raw_text: str, local_draft: str = "", max_examples: int = 3) -> str:
     selection = select_pattern_examples(raw_text, limit=max_examples)
     style_guide = load_style_guide().strip()
+    quality_rules = """
+REGRAS DE REDACAO E PROFUNDIDADE:
+- Aja como engenheiro agronomo especialista em relatorios tecnicos para credito rural.
+- Escreva para analise bancaria, com linguagem formal, objetiva, tecnica e conservadora.
+- Nao invente informacoes cadastrais, area, quantidade de animais, maquinas, benfeitorias, culturas, produtividade, localizacao ou recursos hidricos.
+- Nao assuma dado nao informado. Quando faltar informacao importante, use "Nao informado" ou frase tecnica neutra.
+- Converter alqueires para hectares usando 1 alqueire mineiro/goiano = 4,84 hectares.
+- Padronizar numeros e unidades, por exemplo: 20.000 arvores, 450 cabecas, 5,80 ha.
+- Nao usar linguagem opinativa, promocional ou exagerada sem suporte nos dados.
+- Nao incluir recomendacoes agronomicas fora da conclusao tecnica para credito rural.
+- O texto nao pode ser raso. Quando houver dados produtivos, desenvolva a analise em paragrafos completos.
+- A secao 2. TIPO deve ser a parte mais bem desenvolvida, descrevendo uso, escala, pastagens, piquetes, cochos, cercas, currais, casas, galpoes, confinamento, recursos hidricos, culturas e suporte operacional quando informados.
+- Quando houver mais de uma propriedade, area arrendada ou unidade produtiva, separar claramente cada uma, sem misturar dados.
+- Em casos com poucos dados brutos, enriquecer apenas a redacao tecnica com base nos dados existentes, sem criar estrutura nao informada.
+- Manter exatamente as secoes que o Excel reconhece: 1. DISCRIMINACAO; 2. TIPO (Benfeitorias e Infraestrutura); 3. DESCRICAO (Maquinas, Equipamentos e Implementos); INVESTIMENTOS EM ANDAMENTO (Comentarios); OUTROS COMENTARIOS; CONCLUSAO; FRASES DIRETAS.
+""".strip()
     parts = [
-        "Você é um agrônomo responsável por redigir relatório técnico para análise de crédito rural.",
-        "Siga rigorosamente o guia de estilo e a estrutura do relatório.",
+        "Voce e um agronomo responsavel por redigir relatorio tecnico para analise de credito rural.",
+        "Siga rigorosamente o guia de estilo e a estrutura do relatorio.",
     ]
     if style_guide:
         parts.extend(["", "GUIA DE ESTILO:", style_guide])
+    parts.extend(["", "REGRAS COMPLEMENTARES OBRIGATORIAS:", quality_rules])
 
     approved_examples = [example for example in selection.examples if example.has_expected]
     if approved_examples:
@@ -308,8 +347,10 @@ def build_writer_prompt(raw_text: str, local_draft: str = "", max_examples: int 
                     "",
                     f"EXEMPLO {index}: {example.title}",
                     f"TAGS: {', '.join(example.tags)}",
-                    "SAÍDA APROVADA:",
-                    clip_text(example.expected_text, 3600),
+                    "DADOS BRUTOS DO EXEMPLO:",
+                    clip_text(example.raw_text, 1800),
+                    "SAIDA APROVADA:",
+                    clip_text(example.expected_text, 4600),
                 ]
             )
 
@@ -318,7 +359,7 @@ def build_writer_prompt(raw_text: str, local_draft: str = "", max_examples: int 
             [
                 "",
                 "RASCUNHO LOCAL ESTRUTURADO:",
-                "Use como apoio de campos e cálculos, mas melhore a redação técnica quando necessário.",
+                "Use como apoio de campos e calculos, mas melhore a redacao tecnica quando necessario.",
                 clip_text(local_draft, 4200),
             ]
         )
@@ -330,11 +371,11 @@ def build_writer_prompt(raw_text: str, local_draft: str = "", max_examples: int 
             raw_text.strip(),
             "",
             "TAREFA:",
-            "Gere apenas o relatório técnico final, sem explicações adicionais, mantendo as seções obrigatórias.",
+            "Gere apenas o relatorio tecnico final, sem explicacoes adicionais, mantendo as secoes obrigatorias.",
+            "Antes de finalizar, verifique se a secao 2 ficou suficientemente desenvolvida e se o texto nao ficou curto demais para analise de credito rural.",
         ]
     )
     return "\n".join(parts).strip() + "\n"
-
 
 def clip_text(value: str, max_chars: int) -> str:
     text = value.strip()

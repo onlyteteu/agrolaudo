@@ -53,6 +53,12 @@ def generate_technical_report_auto(raw_text: str) -> WriterRun:
     try:
         prompt = build_writer_prompt(raw_text, local_result.report_text, max_examples=3)
         report_text = request_gemini_report(prompt, api_key=api_key, model=model)
+        quality_issues = assess_report_quality(report_text)
+        if quality_issues:
+            retry_prompt = build_quality_retry_prompt(prompt, report_text, quality_issues)
+            improved_text = request_gemini_report(retry_prompt, api_key=api_key, model=model)
+            if len(improved_text.strip()) >= len(report_text.strip()):
+                report_text = improved_text
         parsed = parse_report_data(report_text)
         if not parsed.get("cliente") or not parsed.get("imovel_nome"):
             raise GeminiWriterError("A resposta da IA não trouxe campos mínimos reconhecíveis.")
@@ -74,6 +80,70 @@ def generate_technical_report_auto(raw_text: str) -> WriterRun:
 
 class GeminiWriterError(RuntimeError):
     pass
+
+
+def assess_report_quality(report_text: str) -> list[str]:
+    text = report_text.strip()
+    issues: list[str] = []
+    upper = text.upper()
+    required_sections = [
+        "1. DISCRIM",
+        "2. TIPO",
+        "3. DESCRI",
+        "OUTROS COMENT",
+        "CONCLUS",
+        "FRASES DIRETAS",
+    ]
+    for section in required_sections:
+        if section not in upper:
+            issues.append(f"secao obrigatoria ausente ou mal identificada: {section}")
+
+    if len(text) < 2400:
+        issues.append("texto final curto demais para laudo de credito rural")
+
+    improvements = extract_between_markers(upper, "2. TIPO", "3. DESCRI")
+    if len(improvements) < 700:
+        issues.append("secao 2. TIPO pouco desenvolvida")
+
+    conclusion = extract_between_markers(upper, "CONCLUS", "FRASES DIRETAS")
+    if len(conclusion) < 300:
+        issues.append("conclusao muito curta")
+
+    sentence_count = text.count(".")
+    if sentence_count < 12:
+        issues.append("poucas frases tecnicas desenvolvidas")
+
+    return issues
+
+
+def extract_between_markers(text: str, start_marker: str, end_marker: str) -> str:
+    start = text.find(start_marker)
+    if start == -1:
+        return ""
+    end = text.find(end_marker, start + len(start_marker))
+    if end == -1:
+        return text[start:]
+    return text[start:end]
+
+
+def build_quality_retry_prompt(original_prompt: str, first_report: str, issues: list[str]) -> str:
+    return "\n".join(
+        [
+            original_prompt.strip(),
+            "",
+            "A PRIMEIRA RESPOSTA FICOU ABAIXO DO PADRAO DE QUALIDADE.",
+            "PROBLEMAS DETECTADOS:",
+            *[f"- {issue}" for issue in issues],
+            "",
+            "PRIMEIRA RESPOSTA:",
+            first_report.strip(),
+            "",
+            "TAREFA DE REESCRITA:",
+            "Reescreva o relatorio completo, mantendo apenas os dados informados e sem inventar informacoes.",
+            "Aumente a profundidade tecnica, principalmente na secao 2. TIPO, em paragrafos completos.",
+            "Mantenha a estrutura obrigatoria e entregue apenas o relatorio final.",
+        ]
+    ).strip() + "\n"
 
 
 def request_gemini_report(prompt: str, *, api_key: str, model: str) -> str:
