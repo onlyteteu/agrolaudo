@@ -1463,3 +1463,1213 @@ def render_credit_report_page() -> str:
 </script>
 </body>
 </html>"""
+
+
+def render_credit_report_page() -> str:
+    return """<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Central Agro | Relat&oacute;rio de cr&eacute;dito</title>
+  <style>
+    :root {
+      --bg: #eef3e9;
+      --surface: #ffffff;
+      --surface-soft: #f8faf4;
+      --ink: #15231b;
+      --muted: #647265;
+      --line: #d8e2d2;
+      --line-strong: #bbcbb5;
+      --green-950: #0b241a;
+      --green-900: #14382a;
+      --green-800: #20523d;
+      --green-700: #2d7650;
+      --green-100: #e6f2e4;
+      --green-50: #f4f8ef;
+      --gold: #b78a43;
+      --gold-soft: #f6ecd9;
+      --warn: #9a5c06;
+      --warn-bg: #fff8e8;
+      --shadow: 0 22px 58px rgba(21, 52, 37, .10);
+      --soft-shadow: 0 12px 28px rgba(21, 52, 37, .08);
+      --radius: 8px;
+    }
+    * { box-sizing: border-box; }
+    html { color-scheme: light; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        linear-gradient(115deg, rgba(20,56,42,.08), transparent 38%),
+        linear-gradient(180deg, rgba(255,255,255,.74), rgba(255,255,255,0) 320px),
+        var(--bg);
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .26;
+      background-image:
+        linear-gradient(90deg, rgba(20,56,42,.10) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(20,56,42,.08) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: linear-gradient(180deg, #000, transparent 72%);
+    }
+    a, button, input, textarea, summary { font: inherit; }
+    svg { flex: 0 0 auto; }
+    .app-shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 230px minmax(0, 1fr);
+      position: relative;
+    }
+    .rail {
+      border-right: 1px solid var(--line);
+      background: rgba(255,255,255,.78);
+      backdrop-filter: blur(16px);
+      padding: 18px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    .brand {
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 8px;
+      color: var(--green-950);
+      font-size: 18px;
+      font-weight: 900;
+    }
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      border-radius: var(--radius);
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: linear-gradient(145deg, var(--green-900), var(--green-950));
+      box-shadow: 0 10px 24px rgba(15,42,32,.16);
+    }
+    .nav {
+      display: grid;
+      gap: 6px;
+    }
+    .nav a {
+      min-height: 42px;
+      padding: 0 10px;
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #46574b;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 760;
+    }
+    .nav a.active {
+      color: var(--green-950);
+      background: var(--green-100);
+    }
+    .nav a:not(.active):hover {
+      background: #f4f7f0;
+      color: var(--green-900);
+    }
+    .rail-note {
+      margin-top: auto;
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .page {
+      min-width: 0;
+      padding: 28px;
+    }
+    .page-inner {
+      width: min(1280px, 100%);
+      margin: 0 auto;
+    }
+    .page-header {
+      position: relative;
+      overflow: hidden;
+      min-height: 190px;
+      border: 1px solid rgba(12,36,26,.18);
+      border-radius: var(--radius);
+      padding: 24px;
+      color: #fff;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,.10), rgba(255,255,255,0) 44%),
+        linear-gradient(120deg, var(--green-950), var(--green-800));
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 22px;
+      margin-bottom: 18px;
+    }
+    .page-header::after {
+      content: "";
+      position: absolute;
+      right: 24px;
+      bottom: 20px;
+      width: 260px;
+      height: 92px;
+      opacity: .22;
+      background:
+        linear-gradient(90deg, transparent 0 18px, rgba(255,255,255,.68) 18px 20px, transparent 20px 42px),
+        linear-gradient(180deg, transparent 0 28px, rgba(255,255,255,.44) 28px 30px, transparent 30px 56px);
+      background-size: 42px 56px;
+    }
+    .header-copy, .head-actions { position: relative; z-index: 1; }
+    .eyebrow {
+      margin-bottom: 8px;
+      color: #d8e9cb;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 0;
+      color: #fff;
+      font-size: 34px;
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+    .lead {
+      max-width: 600px;
+      margin: 10px 0 0;
+      color: rgba(255,255,255,.78);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .hero-strip {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 20px;
+    }
+    .hero-chip {
+      min-height: 34px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: var(--radius);
+      padding: 0 11px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255,255,255,.10);
+      color: rgba(255,255,255,.88);
+      font-size: 12px;
+      font-weight: 850;
+    }
+    .head-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .button, button {
+      min-height: 42px;
+      border-radius: var(--radius);
+      border: 1px solid transparent;
+      padding: 0 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      font-weight: 850;
+      text-decoration: none;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: transform .16s ease, background .16s ease, border-color .16s ease, box-shadow .16s ease;
+    }
+    .button:hover, button:hover { transform: translateY(-1px); }
+    .primary {
+      border-color: #1f6f4c;
+      background: linear-gradient(135deg, #2e7b50, #174630);
+      color: #fff;
+      box-shadow: 0 14px 28px rgba(20,68,43,.20);
+    }
+    .primary:hover { background: var(--green-950); }
+    .secondary {
+      border-color: rgba(255,255,255,.30);
+      background: rgba(255,255,255,.12);
+      color: #fff;
+    }
+    .secondary:hover { background: rgba(255,255,255,.18); }
+    .ghost {
+      border-color: var(--line);
+      background: #fff;
+      color: var(--green-900);
+    }
+    .ghost:hover { background: var(--green-50); }
+    button[disabled] {
+      opacity: .62;
+      cursor: wait;
+      transform: none;
+    }
+    .workspace {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .main-panel { min-height: 660px; }
+    .main-panel .panel-body {
+      grid-template-columns: minmax(0, 1fr) 330px;
+      align-items: start;
+      gap: 18px;
+    }
+    .main-panel .panel-body > div:first-child {
+      grid-column: 1;
+      grid-row: 1 / span 4;
+    }
+    .main-panel .upload-card,
+    .main-panel .notice,
+    .main-panel .primary-action {
+      grid-column: 2;
+    }
+    .panel-head {
+      min-height: 56px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.85), rgba(248,250,244,.92)),
+        var(--surface-soft);
+    }
+    .panel-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--green-950);
+      font-weight: 900;
+    }
+    .panel-kicker {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .panel-body {
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+    }
+    .notes-card {
+      min-height: 100%;
+      border: 1px solid #dfe8d9;
+      border-radius: var(--radius);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.98), rgba(250,252,246,.94)),
+        var(--surface);
+      padding: 14px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.80);
+    }
+    .notes-head {
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .notes-head label { margin-bottom: 0; }
+    .notes-badge {
+      border: 1px solid #dfe8d9;
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: #f5f9ef;
+      color: var(--green-900);
+      font-size: 12px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+    label {
+      display: block;
+      margin-bottom: 7px;
+      color: #2e4236;
+      font-size: 13px;
+      font-weight: 850;
+    }
+    textarea, input[type="text"] {
+      width: 100%;
+      border: 1px solid #c9d5c5;
+      border-radius: var(--radius);
+      color: var(--ink);
+      background: #fffefc;
+      outline-color: var(--green-700);
+      transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+    }
+    textarea:focus, input[type="text"]:focus {
+      border-color: var(--green-700);
+      box-shadow: 0 0 0 3px rgba(47,118,80,.12);
+    }
+    textarea {
+      min-height: 540px;
+      resize: vertical;
+      padding: 18px;
+      font: 15px/1.62 "Segoe UI", Arial, sans-serif;
+    }
+    #rawData {
+      border-color: #bfcfc0;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.98), rgba(255,253,248,.98));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.90);
+    }
+    #rawData::placeholder { color: #879386; }
+    input[type="text"] {
+      min-height: 40px;
+      padding: 10px 11px;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    #dados { min-height: 300px; font-size: 13px; }
+    .action-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .primary-action {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      align-items: center;
+    }
+    .primary-action .primary {
+      min-height: 58px;
+      padding-inline: 20px;
+      font-size: 15px;
+      width: 100%;
+    }
+    .muted {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .notice {
+      display: none;
+      padding: 11px 12px;
+      border: 1px solid #efd8a5;
+      border-radius: var(--radius);
+      background: var(--warn-bg);
+      color: #664705;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .notice.success {
+      border-color: #bfd8c1;
+      background: var(--green-100);
+      color: var(--green-900);
+    }
+    .notice.show { display: block; }
+    .summary {
+      display: none;
+      grid-template-columns: 1fr 1fr;
+      gap: 9px;
+    }
+    .summary-row {
+      border: 1px solid #e0e7dc;
+      border-radius: var(--radius);
+      padding: 10px 11px;
+      background: var(--surface-soft);
+    }
+    .summary-row small {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+    .summary-row strong {
+      display: block;
+      color: var(--green-950);
+      font-size: 14px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+    .summary-row.wide {
+      grid-column: 1 / -1;
+    }
+    .summary-row.wide strong {
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    details {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      overflow: hidden;
+    }
+    summary {
+      min-height: 46px;
+      padding: 0 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--green-900);
+      font-weight: 850;
+      cursor: pointer;
+    }
+    .fields {
+      border-top: 1px solid var(--line);
+      padding: 12px;
+      display: grid;
+      gap: 12px;
+      max-height: 380px;
+      overflow: auto;
+    }
+    .field textarea {
+      min-height: 92px;
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+    }
+    .missing input,
+    .missing textarea {
+      border-color: #d59b32;
+      background: #fffaf0;
+    }
+    .required {
+      margin-left: 6px;
+      color: var(--warn);
+      font-size: 11px;
+      font-weight: 850;
+    }
+    .upload-card {
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.76), rgba(246,250,242,.94)),
+        var(--surface-soft);
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+      box-shadow: 0 12px 28px rgba(23,70,48,.08);
+    }
+    .upload-button {
+      min-height: 122px;
+      border: 1.5px dashed rgba(45, 107, 63, .52);
+      border-radius: var(--radius);
+      background:
+        linear-gradient(135deg, rgba(45,107,63,.10), rgba(199,163,82,.13)),
+        #fffef9;
+      color: var(--green-900);
+      display: grid;
+      place-items: center;
+      gap: 8px;
+      padding: 18px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+    }
+    .upload-button:hover {
+      border-color: var(--green-700);
+      transform: translateY(-1px);
+      box-shadow: 0 14px 30px rgba(18, 48, 31, .10);
+    }
+    .upload-button.drag-over {
+      border-color: var(--gold);
+      background:
+        linear-gradient(135deg, rgba(45,107,63,.16), rgba(199,163,82,.22)),
+        #fffef9;
+    }
+    .upload-button input { display: none; }
+    .upload-button strong {
+      display: block;
+      font-size: 15px;
+      line-height: 1.2;
+    }
+    .upload-button small {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .upload-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--green-700);
+      color: white;
+      box-shadow: 0 10px 22px rgba(45,107,63,.22);
+    }
+    .file-count {
+      min-height: 22px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .file-list {
+      display: grid;
+      gap: 6px;
+      max-height: 112px;
+      overflow: auto;
+    }
+    .file-pill {
+      min-height: 30px;
+      border: 1px solid #dce7d8;
+      border-radius: 999px;
+      background: white;
+      color: var(--green-950);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+      line-height: 1.25;
+    }
+    .file-pill span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .file-pill small {
+      color: var(--muted);
+      flex: 0 0 auto;
+    }
+    .spinner {
+      display: none;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,.45);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    button[disabled] .spinner { display: inline-block; }
+    .side-panel {
+      position: sticky;
+      top: 18px;
+    }
+    .side-panel .panel-body { gap: 12px; }
+    .status-tile {
+      min-height: 70px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px;
+      background: var(--green-50);
+      display: grid;
+      gap: 5px;
+    }
+    .status-tile small {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+    .status-tile strong {
+      color: var(--green-950);
+      font-size: 16px;
+      line-height: 1.25;
+    }
+    .advanced-panel {
+      display: none;
+      margin-top: 18px;
+      grid-column: 1 / -1;
+    }
+    .advanced-panel.show { display: block; }
+    .hidden-workspace { display: none; }
+    .preview-box {
+      min-height: 300px;
+      max-height: 430px;
+      overflow: auto;
+      border: 1px solid #dfe8d9;
+      border-radius: var(--radius);
+      background:
+        linear-gradient(180deg, #fffef9, #fbf8ef);
+      padding: 14px;
+      color: var(--green-950);
+      font-size: 13px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+    .preview-box.empty {
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .preview-hint {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: none;
+      place-items: center;
+      padding: 18px;
+      background: rgba(11, 25, 19, .58);
+      backdrop-filter: blur(7px);
+    }
+    .overlay.show { display: grid; }
+    .overlay-card {
+      width: min(430px, 100%);
+      border: 1px solid rgba(255,255,255,.20);
+      border-radius: var(--radius);
+      padding: 22px;
+      background: #fffef9;
+      box-shadow: 0 30px 80px rgba(0,0,0,.22);
+    }
+    .loader {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 4px solid #dfe8d9;
+      border-top-color: var(--green-700);
+      animation: spin .8s linear infinite;
+      margin-bottom: 16px;
+    }
+    .overlay-card h2 {
+      margin: 0;
+      color: var(--green-950);
+      font-size: 20px;
+      line-height: 1.2;
+    }
+    .overlay-card p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    .progress-track {
+      height: 8px;
+      border-radius: 999px;
+      margin-top: 18px;
+      overflow: hidden;
+      background: #e7eddf;
+    }
+    .progress-bar {
+      width: 42%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--green-700), var(--gold));
+      animation: progress 1.5s ease-in-out infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes progress {
+      0% { transform: translateX(-80%); }
+      55% { transform: translateX(85%); }
+      100% { transform: translateX(180%); }
+    }
+    @media (max-width: 1180px) {
+      .workspace { grid-template-columns: 1fr; }
+      .side-panel { position: static; }
+      .main-panel .panel-body { grid-template-columns: minmax(0, 1fr) 280px; }
+      textarea { min-height: 360px; }
+    }
+    @media (max-width: 920px) {
+      .app-shell { grid-template-columns: 1fr; }
+      .rail {
+        min-height: auto;
+        padding: 12px 14px;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .nav, .rail-note { display: none; }
+      .page { padding: 14px; }
+      .page-header {
+        min-height: auto;
+        padding: 18px;
+        flex-direction: column;
+      }
+      h1 { font-size: 25px; }
+      .main-panel .panel-body { grid-template-columns: 1fr; }
+      .main-panel .panel-body > div:first-child,
+      .main-panel .upload-card,
+      .main-panel .notice,
+      .main-panel .primary-action {
+        grid-column: auto;
+      }
+      .primary-action { grid-template-columns: 1fr; }
+      .summary { grid-template-columns: 1fr; }
+      textarea { min-height: 320px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="rail">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 19c8 0 13-6 13-14-8 0-13 6-13 14Z" stroke="currentColor" stroke-width="2"/><path d="M5 19c3-5 7-8 13-10" stroke="currentColor" stroke-width="2"/></svg>
+        </div>
+        Central Agro
+      </div>
+      <nav class="nav" aria-label="Navegacao principal">
+        <a href="/">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1v-8Z" stroke="currentColor" stroke-width="2"/></svg>
+          Inicio
+        </a>
+        <a class="active" href="/relatorio-credito">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 3h9l3 3v15H6V3Z" stroke="currentColor" stroke-width="2"/><path d="M14 3v4h4M9 13h6M9 17h6M9 9h2" stroke="currentColor" stroke-width="2"/></svg>
+          Relatorio
+        </a>
+      </nav>
+      <div class="rail-note">Fluxo local para testar antes de enviar ao site.</div>
+    </aside>
+
+    <main class="page">
+      <div class="page-inner">
+        <header class="page-header">
+          <div class="header-copy">
+            <div class="eyebrow">Credito rural</div>
+            <h1>Gerador de planilha final</h1>
+            <p class="lead">Cole as anotacoes da vistoria, anexe as fotos e baixe o Excel no padrao do laudo.</p>
+            <div class="hero-strip">
+              <span class="hero-chip"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2"/></svg>Extracao automatica</span>
+              <span class="hero-chip"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 7h16v13H4V7Z" stroke="currentColor" stroke-width="2"/><path d="m8 7 2-3h4l2 3" stroke="currentColor" stroke-width="2"/></svg>Fotos numeradas</span>
+              <span class="hero-chip"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M6 3h9l3 3v15H6V3Z" stroke="currentColor" stroke-width="2"/></svg>XLSX</span>
+            </div>
+          </div>
+          <div class="head-actions">
+            <a class="button secondary" href="/">Inicio</a>
+            <button class="secondary" type="button" id="clearBtn">Limpar</button>
+          </div>
+        </header>
+
+        <form id="reportForm" method="post" action="/generate" enctype="multipart/form-data" class="workspace">
+          <section class="panel main-panel">
+            <div class="panel-head">
+              <div class="panel-title">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M4 5h16M4 12h16M4 19h10" stroke="currentColor" stroke-width="2"/></svg>
+                Entrada do relatorio
+              </div>
+              <span class="panel-kicker">Rascunho</span>
+            </div>
+            <div class="panel-body">
+              <div class="notes-card">
+                <div class="notes-head">
+                  <label for="rawData">Anotacoes da vistoria</label>
+                  <span class="notes-badge">Texto da visita</span>
+                </div>
+                <textarea id="rawData" placeholder="Cole aqui os dados brutos da visita, do jeito que recebeu."></textarea>
+              </div>
+
+              <div class="upload-card">
+                <label class="upload-button" for="photos">
+                  <input id="photos" name="photos" type="file" accept="image/*" multiple>
+                  <span class="upload-icon" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 7h16v13H4V7Z" stroke="currentColor" stroke-width="2"/><path d="m8 7 2-3h4l2 3" stroke="currentColor" stroke-width="2"/><path d="m8 15 2-2 3 3 2-2 3 4" stroke="currentColor" stroke-width="2"/></svg>
+                  </span>
+                  <span>
+                    <strong>Selecionar fotos da vistoria</strong>
+                    <small>Escolha varias imagens de uma vez</small>
+                  </span>
+                </label>
+                <span class="file-count" id="fileCount">Nenhuma foto selecionada</span>
+                <div class="file-list" id="fileList"></div>
+              </div>
+
+              <div id="writerNotice" class="notice"></div>
+
+              <div class="primary-action">
+                <button class="primary" type="submit" id="submitBtn" data-label="Gerar e baixar planilha">
+                  <span class="spinner" aria-hidden="true"></span>
+                  <span class="btn-label">Gerar e baixar planilha</span>
+                </button>
+              </div>
+
+              <input type="hidden" id="reviewData" name="review_data">
+              <textarea id="dados" name="dados" hidden></textarea>
+            </div>
+          </section>
+
+          <div class="hidden-workspace" aria-hidden="true">
+            <div class="summary" id="summaryItems"></div>
+            <div id="fields" class="fields"></div>
+            <textarea id="technicalPreview"></textarea>
+            <button type="button" id="writeBtn" data-label="Gerar texto tecnico"></button>
+            <button type="button" id="extractBtn" data-label="Atualizar extracao"></button>
+            <strong id="statusText">Pronto para gerar</strong>
+            <div id="previewBox"></div>
+            <div id="okBox"></div>
+            <div id="missingBox"></div>
+          </div>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <div class="overlay" id="downloadOverlay" role="status" aria-live="polite">
+    <div class="overlay-card">
+      <div class="loader" aria-hidden="true"></div>
+      <h2 id="overlayTitle">Gerando planilha</h2>
+      <p id="overlayText">Preparando o arquivo para download.</p>
+      <div class="progress-track"><div class="progress-bar"></div></div>
+    </div>
+  </div>
+
+<script>
+  const rawData = document.getElementById('rawData');
+  const technicalText = document.getElementById('dados');
+  const technicalPreview = document.getElementById('technicalPreview');
+  const writeBtn = document.getElementById('writeBtn');
+  const writerNotice = document.getElementById('writerNotice');
+  const extractBtn = document.getElementById('extractBtn');
+  const fieldsEl = document.getElementById('fields');
+  const summaryItems = document.getElementById('summaryItems');
+  const previewBox = document.getElementById('previewBox');
+  const missingBox = document.getElementById('missingBox');
+  const okBox = document.getElementById('okBox');
+  const statusText = document.getElementById('statusText');
+  const reviewData = document.getElementById('reviewData');
+  const fileInput = document.getElementById('photos');
+  const uploadButton = document.querySelector('.upload-button');
+  const fileCount = document.getElementById('fileCount');
+  const fileList = document.getElementById('fileList');
+  const form = document.getElementById('reportForm');
+  const submitBtn = document.getElementById('submitBtn');
+  const overlay = document.getElementById('downloadOverlay');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlayText = document.getElementById('overlayText');
+  let lastExtraction = null;
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    rawData.value = '';
+    technicalText.value = '';
+    technicalPreview.value = '';
+    fieldsEl.innerHTML = '';
+    summaryItems.innerHTML = '';
+    setPreview('');
+    writerNotice.className = 'notice';
+    writerNotice.textContent = '';
+    okBox.className = 'notice success';
+    okBox.textContent = '';
+    missingBox.className = 'notice';
+    missingBox.textContent = '';
+    statusText.textContent = 'Pronto para gerar';
+    reviewData.value = '';
+    lastExtraction = null;
+    if (fileInput) fileInput.value = '';
+    if (fileCount) fileCount.textContent = 'Nenhuma foto selecionada';
+    if (fileList) fileList.innerHTML = '';
+    rawData.focus();
+  });
+
+  function setBusy(button, busy, label) {
+    if (!button) return;
+    button.disabled = busy;
+    const text = button.querySelector('.btn-label');
+    if (text) text.textContent = busy ? label : button.dataset.label;
+  }
+
+  function setAllBusy(busy, label = 'Gerando') {
+    setBusy(submitBtn, busy, label);
+    setBusy(writeBtn, busy, 'Aguarde');
+    setBusy(extractBtn, busy, 'Aguarde');
+  }
+
+  function showOverlay(title, text) {
+    overlayTitle.textContent = title;
+    overlayText.textContent = text;
+    overlay.classList.add('show');
+  }
+
+  function hideOverlay() {
+    overlay.classList.remove('show');
+  }
+
+  extractBtn.addEventListener('click', refreshFieldsFromTechnicalText);
+
+  technicalPreview.addEventListener('input', () => {
+    technicalText.value = technicalPreview.value;
+    reviewData.value = '';
+    lastExtraction = null;
+    statusText.textContent = 'Extracao pendente';
+    missingBox.textContent = 'Texto alterado. Atualize a extracao antes de gerar.';
+    missingBox.className = 'notice show';
+  });
+
+  async function generateTechnicalReport() {
+    const rawText = rawData.value.trim();
+    if (!rawText) throw new Error('Cole as anotacoes da vistoria.');
+    writerNotice.className = 'notice';
+    writerNotice.textContent = '';
+
+    const response = await fetch('/write-technical-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw_text: rawText })
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || 'Nao consegui gerar o relatorio.');
+
+    technicalText.value = payload.report_text || '';
+    technicalPreview.value = payload.report_text || '';
+    setPreview(payload.report_text || '');
+    renderFields(payload.review);
+    writerNotice.className = 'notice success show';
+    writerNotice.textContent = 'Dados preparados. Gerando a planilha.';
+    statusText.textContent = 'Dados prontos';
+    return payload;
+  }
+
+  async function refreshFieldsFromTechnicalText() {
+    const dados = technicalText.value.trim();
+    if (!dados) {
+      technicalPreview.focus();
+      return false;
+    }
+    setBusy(extractBtn, true, 'Atualizando');
+    try {
+      const response = await fetch('/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dados })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Nao consegui atualizar a extracao.');
+      renderFields(payload);
+      statusText.textContent = 'Extracao pronta';
+      return true;
+    } catch (error) {
+      showError(error.message);
+      return false;
+    } finally {
+      setBusy(extractBtn, false, '');
+    }
+  }
+
+  function renderFields(payload) {
+    if (!payload) return;
+    lastExtraction = payload;
+    fieldsEl.innerHTML = '';
+    renderSummary(payload);
+
+    if (payload.missing.length) {
+      okBox.textContent = `${payload.summary.found} campos encontrados.`;
+      okBox.className = 'notice success show';
+      missingBox.textContent = `Campos faltando: ${payload.missing.join(', ')}.`;
+      missingBox.className = 'notice show';
+    } else {
+      okBox.textContent = 'Campos essenciais reconhecidos.';
+      okBox.className = 'notice success show';
+      missingBox.className = 'notice';
+      missingBox.textContent = '';
+    }
+
+    payload.fields.forEach((field) => {
+      const wrapper = document.createElement('div');
+      wrapper.className = `field ${field.missing ? 'missing' : ''}`;
+      const label = document.createElement('label');
+      label.htmlFor = `field-${field.key}`;
+      label.textContent = field.label;
+      if (field.required) {
+        const required = document.createElement('span');
+        required.className = 'required';
+        required.textContent = field.missing ? 'faltando' : 'obrigatorio';
+        label.appendChild(required);
+      }
+      const input = field.type === 'textarea' ? document.createElement('textarea') : document.createElement('input');
+      input.id = `field-${field.key}`;
+      input.dataset.key = field.key;
+      if (field.type !== 'textarea') input.type = 'text';
+      input.value = field.value || '';
+      input.addEventListener('input', () => {
+        syncReviewData();
+        renderSummaryFromInputs();
+      });
+      wrapper.appendChild(label);
+      wrapper.appendChild(input);
+      fieldsEl.appendChild(wrapper);
+    });
+    syncReviewData();
+  }
+
+  function fieldValue(payload, key) {
+    const item = payload.fields.find((field) => field.key === key);
+    return item && item.value ? item.value : 'Nao informado';
+  }
+
+  function renderSummary(payload) {
+    summaryItems.innerHTML = '';
+  }
+
+  function renderSummaryFromInputs() {
+    const getValue = (key) => {
+      const input = fieldsEl.querySelector(`[data-key="${key}"]`);
+      return input && input.value ? input.value : 'Nao informado';
+    };
+    renderSummary({
+      fields: [
+        { key: 'cliente', value: getValue('cliente') },
+        { key: 'area_total_ha', value: getValue('area_total_ha') },
+        { key: 'imovel_nome', value: getValue('imovel_nome') },
+        { key: 'atividade_principal', value: getValue('atividade_principal') }
+      ]
+    });
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
+  function setPreview(text) {
+    const clean = String(text || '').trim();
+    if (!clean) {
+      previewBox.textContent = '';
+      previewBox.className = 'preview-box empty';
+      return;
+    }
+    const limit = 1500;
+    previewBox.textContent = clean.length > limit ? `${clean.slice(0, limit).trim()}...` : clean;
+    previewBox.className = 'preview-box';
+  }
+
+  function syncReviewData() {
+    if (!lastExtraction) return;
+    const fields = {};
+    fieldsEl.querySelectorAll('[data-key]').forEach((input) => {
+      fields[input.dataset.key] = input.value;
+    });
+    reviewData.value = JSON.stringify({ parsed: lastExtraction.parsed, fields });
+  }
+
+  function showError(message) {
+    writerNotice.textContent = message;
+    writerNotice.className = 'notice show';
+    missingBox.textContent = message;
+    missingBox.className = 'notice show';
+    statusText.textContent = 'Atencao';
+  }
+
+  function filenameFromResponse(response) {
+    const header = response.headers.get('content-disposition') || '';
+    const match = header.match(/filename="?([^"]+)"?/i);
+    return match ? match[1] : 'relatorio-agrolaudo.xlsx';
+  }
+
+  async function downloadWorkbook() {
+    const formData = new FormData(form);
+    const response = await fetch('/generate', { method: 'POST', body: formData });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text.replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim() || 'Nao consegui gerar a planilha.');
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filenameFromResponse(response);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  fileInput.addEventListener('change', () => {
+    const files = Array.from(fileInput.files || []);
+    const total = files.length;
+    fileCount.textContent = total === 0
+      ? 'Nenhuma foto selecionada'
+      : total === 1
+        ? '1 foto selecionada'
+        : `${total} fotos selecionadas`;
+    fileList.innerHTML = files.slice(0, 6).map((file, index) => `
+      <div class="file-pill">
+        <span>Foto ${String(index + 1).padStart(2, '0')} - ${escapeHtml(file.name)}</span>
+        <small>${Math.max(1, Math.round(file.size / 1024))} KB</small>
+      </div>
+    `).join('');
+    if (total > 6) {
+      fileList.insertAdjacentHTML('beforeend', `<div class="file-pill"><span>Mais ${total - 6} foto(s)</span><small>incluidas</small></div>`);
+    }
+  });
+
+  ['dragenter', 'dragover'].forEach((eventName) => {
+    uploadButton.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      uploadButton.classList.add('drag-over');
+    });
+  });
+
+  ['dragleave', 'drop'].forEach((eventName) => {
+    uploadButton.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      uploadButton.classList.remove('drag-over');
+    });
+  });
+
+  uploadButton.addEventListener('drop', (event) => {
+    const files = Array.from(event.dataTransfer.files || []).filter((file) => file.type.startsWith('image/'));
+    if (!files.length) return;
+    fileInput.files = event.dataTransfer.files;
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!rawData.value.trim() && !technicalText.value.trim()) {
+      rawData.focus();
+      return;
+    }
+
+    setAllBusy(true, 'Gerando');
+    try {
+      if (!technicalText.value.trim()) {
+        showOverlay('Escrevendo relatorio', 'Convertendo as anotacoes em texto tecnico.');
+        await generateTechnicalReport();
+      }
+      if (!reviewData.value) {
+        showOverlay('Extraindo campos', 'Separando cliente, areas e propriedades.');
+        const ok = await refreshFieldsFromTechnicalText();
+        if (!ok) return;
+      }
+      syncReviewData();
+      showOverlay('Gerando planilha', 'Preparando o arquivo para download.');
+      await downloadWorkbook();
+      overlayTitle.textContent = 'Download iniciado';
+      overlayText.textContent = 'A planilha foi enviada para o navegador.';
+      statusText.textContent = 'Planilha baixada';
+      setTimeout(hideOverlay, 1200);
+    } catch (error) {
+      hideOverlay();
+      showError(error.message);
+    } finally {
+      setAllBusy(false);
+    }
+  });
+</script>
+</body>
+</html>"""
