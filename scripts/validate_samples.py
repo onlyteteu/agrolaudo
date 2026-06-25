@@ -248,10 +248,6 @@ def assert_equal(actual, expected, label: str) -> None:
         raise AssertionError(f"{label}: esperado {expected!r}, veio {actual!r}")
 
 
-def border_style(side: object) -> str | None:
-    return getattr(side, "style", None)
-
-
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     for raw, expected in {"29,04 ha": 29.04, "29.04": 29.04, "1.234,56": 1234.56}.items():
@@ -440,17 +436,12 @@ def main() -> None:
     assert_equal(report_photo_rows, [213, 232, 251], "posicao das fotos inseridas")
     assert_equal(photo_worksheet["D212"].value, "Foto 01", "legenda primeira foto")
     assert_equal(photo_worksheet["D231"].value, "Foto 02", "legenda segunda foto")
-    assert_equal(border_style(photo_worksheet["D212"].border.top), None, "sem borda superior na legenda da primeira foto")
-    assert_equal(border_style(photo_worksheet["D213"].border.left), None, "sem borda esquerda na primeira foto")
-    assert_equal(border_style(photo_worksheet["K229"].border.right), None, "sem borda direita na primeira foto")
-    assert_equal(border_style(photo_worksheet["K229"].border.bottom), None, "sem borda inferior na primeira foto")
     prepared_photo = OUTPUT_DIR / "fotos-numeradas-images" / "foto-01.jpg"
     with Image.open(prepared_photo) as image:
         assert_equal(image.size, (520, 330), "tamanho da foto preparada")
-        left_edge = [image.getpixel((0, y)) for y in range(image.height)]
-        right_edge = [image.getpixel((image.width - 1, y)) for y in range(image.height)]
-        if all(pixel == (255, 255, 255) for pixel in left_edge + right_edge):
-            raise AssertionError("foto preparada contem faixa branca lateral")
+        black_edge = [image.getpixel((0, y)) for y in range(image.height)] + [image.getpixel((x, 0)) for x in range(image.width)]
+        if not all(red < 30 and green < 30 and blue < 30 for red, green, blue in black_edge):
+            raise AssertionError("foto preparada nao contem moldura preta externa")
 
     coordinate_photo = OUTPUT_DIR / "foto-com-coordenada.jpg"
     marker = Image.new("RGB", (640, 480), "white")
@@ -465,9 +456,34 @@ def main() -> None:
     )
     prepared_coordinate_photo = OUTPUT_DIR / "foto-coordenada-preservada-images" / "foto-01.jpg"
     with Image.open(prepared_coordinate_photo) as image:
-        red, green, blue = image.getpixel((0, 0))
-        if not (red > 150 and green < 90 and blue < 90):
+        preserved_corner = False
+        for x in range(3, 14):
+            for y in range(3, 14):
+                red, green, blue = image.getpixel((x, y))
+                if red > 150 and green < 90 and blue < 90:
+                    preserved_corner = True
+                    break
+            if preserved_corner:
+                break
+        if not preserved_corner:
             raise AssertionError("canto superior esquerdo da foto foi cortado")
+
+    coordinate_photo_copy = OUTPUT_DIR / "foto-com-coordenada-copia.jpg"
+    coordinate_photo_copy.write_bytes(coordinate_photo.read_bytes())
+    duplicate_output = generate_report(
+        CASES[0]["source"].read_text(encoding="utf-8"),
+        [coordinate_photo, coordinate_photo_copy],
+        OUTPUT_DIR / "foto-duplicada.xlsx",
+    )
+    duplicate_worksheet = load_workbook(duplicate_output).active
+    duplicate_photo_rows = [
+        int(image.anchor._from.row) + 1
+        for image in duplicate_worksheet._images
+        if getattr(getattr(image, "anchor", None), "_from", None) is not None and int(image.anchor._from.row) + 1 >= 200
+    ]
+    assert_equal(duplicate_photo_rows, [213], "foto duplicada nao e inserida duas vezes")
+    assert_equal(duplicate_worksheet["D212"].value, "Foto 01", "legenda unica para foto duplicada")
+    assert_equal(duplicate_worksheet["D231"].value, None, "sem legenda duplicada para foto repetida")
 
     for case in CASES:
         text = case["source"].read_text(encoding="utf-8")

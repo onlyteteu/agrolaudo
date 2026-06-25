@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shutil
@@ -14,7 +15,6 @@ from typing import Any
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.drawing.image import Image as ExcelImage
-from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
 from openpyxl.utils import get_column_letter, range_boundaries
 from openpyxl.worksheet.worksheet import Worksheet
 from PIL import Image, ImageOps
@@ -36,6 +36,8 @@ from .field_mapping import (
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_TEMPLATE = ROOT_DIR / "templates" / "relatorio-modelo.xlsx"
 DEFAULT_OUTPUT_DIR = ROOT_DIR / "outputs"
+PHOTO_BORDER_PX = 3
+PHOTO_BORDER_COLOR = (0, 0, 0)
 PROPERTY_START_ROW = 18
 PROPERTY_TEMPLATE_END_ROW = 21
 PROPERTY_INSERT_AT_ROW = 22
@@ -1501,13 +1503,15 @@ def adjust_dynamic_row_heights(worksheet: Worksheet) -> None:
 
 
 def apply_photos(worksheet: Worksheet, photo_paths: list[str | Path], image_output_dir: Path, row_offset: int = 0) -> None:
-    valid_photos = [Path(path) for path in photo_paths if Path(path).exists()]
+    valid_photos = unique_existing_photo_paths(photo_paths)
     remove_old_report_photos(worksheet)
     clear_photo_slots(worksheet, row_offset)
     if not valid_photos:
         return
 
     image_output_dir.mkdir(parents=True, exist_ok=True)
+    for old_photo in image_output_dir.glob("foto-*.jpg"):
+        old_photo.unlink(missing_ok=True)
 
     for index, photo_path in enumerate(valid_photos[: len(PHOTO_ANCHORS)]):
         from_row, from_col, to_row, to_col = PHOTO_ANCHORS[index]
@@ -1517,13 +1521,32 @@ def apply_photos(worksheet: Worksheet, photo_paths: list[str | Path], image_outp
 
         prepared_path = prepare_photo(photo_path, image_output_dir, index + 1)
         image = ExcelImage(str(prepared_path))
-        image_start_row = from_row + 1 if from_row + 1 < to_row else from_row
-        image.anchor = TwoCellAnchor(
-            editAs="twoCell",
-            _from=AnchorMarker(row=image_start_row, col=from_col),
-            to=AnchorMarker(row=to_row, col=to_col),
-        )
+        image.width, image.height = PHOTO_MAX_SIZE
+        image.anchor = f"{get_column_letter(from_col + 1)}{from_row + 2}"
         worksheet.add_image(image)
+
+
+def unique_existing_photo_paths(photo_paths: list[str | Path]) -> list[Path]:
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for path_value in photo_paths:
+        path = Path(path_value)
+        if not path.exists() or not path.is_file():
+            continue
+        signature = photo_signature(path)
+        if signature in seen:
+            continue
+        seen.add(signature)
+        unique.append(path)
+    return unique
+
+
+def photo_signature(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def clear_photo_slots(worksheet: Worksheet, row_offset: int = 0) -> None:
@@ -1535,10 +1558,8 @@ def clear_photo_slots(worksheet: Worksheet, row_offset: int = 0) -> None:
                 cell = worksheet.cell(row=row, column=col)
                 cell.border = Border()
                 cell.fill = PatternFill(fill_type=None)
-
-        caption_cell = worksheet.cell(row=from_row + 1, column=from_col + 1)
-        if isinstance(caption_cell.value, str) and re.fullmatch(r"Foto\s+\d{2}", caption_cell.value.strip(), flags=re.IGNORECASE):
-            caption_cell.value = None
+                if is_photo_caption(cell.value):
+                    cell.value = None
 
 
 def format_photo_slot(worksheet: Worksheet, number: int, from_row: int, from_col: int, to_row: int, to_col: int) -> None:
@@ -1566,6 +1587,10 @@ def format_photo_slot(worksheet: Worksheet, number: int, from_row: int, from_col
             worksheet.cell(row=row, column=col).border = Border()
 
 
+def is_photo_caption(value: Any) -> bool:
+    return isinstance(value, str) and re.fullmatch(r"\s*Foto\s+\d{1,3}\s*", value, flags=re.IGNORECASE) is not None
+
+
 def remove_old_report_photos(worksheet: Worksheet) -> None:
     kept_images = []
     for image in getattr(worksheet, "_images", []):
@@ -1587,8 +1612,14 @@ def prepare_photo(photo_path: Path, output_dir: Path, index: int) -> Path:
     output_path = output_dir / f"foto-{index:02d}.jpg"
     with Image.open(photo_path) as original:
         image = ImageOps.exif_transpose(original).convert("RGB")
-        fitted = image.resize(PHOTO_MAX_SIZE, Image.Resampling.LANCZOS)
-        fitted.save(output_path, quality=88, optimize=True)
+        inner_size = (
+            max(1, PHOTO_MAX_SIZE[0] - PHOTO_BORDER_PX * 2),
+            max(1, PHOTO_MAX_SIZE[1] - PHOTO_BORDER_PX * 2),
+        )
+        fitted = image.resize(inner_size, Image.Resampling.LANCZOS)
+        framed = Image.new("RGB", PHOTO_MAX_SIZE, PHOTO_BORDER_COLOR)
+        framed.paste(fitted, (PHOTO_BORDER_PX, PHOTO_BORDER_PX))
+        framed.save(output_path, quality=88, optimize=True)
     return output_path
 
 
