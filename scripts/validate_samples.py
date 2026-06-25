@@ -436,9 +436,11 @@ def main() -> None:
     assert_equal(report_photo_rows, [213, 232, 251], "posicao das fotos inseridas")
     assert_equal(photo_worksheet["D212"].value, "Foto 01", "legenda primeira foto")
     assert_equal(photo_worksheet["D231"].value, "Foto 02", "legenda segunda foto")
+    assert_equal(photo_worksheet["J230"].value, None, "sem numero solto entre primeira e segunda foto")
+    assert_equal(photo_worksheet["J248"].value, None, "sem numero solto entre segunda e terceira foto")
     prepared_photo = OUTPUT_DIR / "fotos-numeradas-images" / "foto-01.jpg"
     with Image.open(prepared_photo) as image:
-        assert_equal(image.size, (520, 330), "tamanho da foto preparada")
+        assert_equal(image.size, (580, 360), "tamanho da foto preparada")
         black_edge = [image.getpixel((0, y)) for y in range(image.height)] + [image.getpixel((x, 0)) for x in range(image.width)]
         if not all(red < 30 and green < 30 and blue < 30 for red, green, blue in black_edge):
             raise AssertionError("foto preparada nao contem moldura preta externa")

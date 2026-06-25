@@ -1553,13 +1553,12 @@ def clear_photo_slots(worksheet: Worksheet, row_offset: int = 0) -> None:
     for from_row, from_col, to_row, to_col in PHOTO_ANCHORS:
         from_row = shifted_row(from_row + 1, row_offset) - 1
         to_row = shifted_row(to_row + 1, row_offset) - 1
-        for row in range(from_row + 1, to_row + 2):
+        for row in range(from_row + 1, to_row + 3):
             for col in range(from_col + 1, to_col + 2):
                 cell = worksheet.cell(row=row, column=col)
+                cell.value = None
                 cell.border = Border()
                 cell.fill = PatternFill(fill_type=None)
-                if is_photo_caption(cell.value):
-                    cell.value = None
 
 
 def format_photo_slot(worksheet: Worksheet, number: int, from_row: int, from_col: int, to_row: int, to_col: int) -> None:
@@ -1585,10 +1584,6 @@ def format_photo_slot(worksheet: Worksheet, number: int, from_row: int, from_col
     for row in range(start_row, end_row + 1):
         for col in range(start_col, end_col + 1):
             worksheet.cell(row=row, column=col).border = Border()
-
-
-def is_photo_caption(value: Any) -> bool:
-    return isinstance(value, str) and re.fullmatch(r"\s*Foto\s+\d{1,3}\s*", value, flags=re.IGNORECASE) is not None
 
 
 def remove_old_report_photos(worksheet: Worksheet) -> None:

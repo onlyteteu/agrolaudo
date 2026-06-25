@@ -11,7 +11,7 @@
 ## Mudancas principais
 
 - Fotos:
-  - As fotos sao padronizadas para `520x330`.
+  - As fotos sao padronizadas para `580x360`.
   - Nao ha crop/recorte; a imagem e redimensionada inteira.
   - Isso preserva o canto superior esquerdo, onde normalmente ficam as coordenadas.
   - As posicoes das fotos foram sincronizadas com o novo template.
