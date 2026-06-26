@@ -944,14 +944,118 @@ def split_benfeitoria_blocks(value: Any) -> list[str]:
     start_pattern = r"\b(?:Na|No)\s+(?:Fazenda|Unidade|Grupo|S[ií]tio|Ch[aá]cara)\b"
     matches = list(re.finditer(start_pattern, text))
     if not matches:
-        return [text]
+        return split_single_benfeitoria_block(text)
 
     blocks: list[str] = []
     for index, match in enumerate(matches):
         end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
         block = text[match.start() : end].strip()
         if block:
-            blocks.append(block)
+            if len(matches) == 1:
+                blocks.extend(split_single_benfeitoria_block(block))
+            else:
+                blocks.append(block)
+    return blocks
+
+
+def split_single_benfeitoria_block(text: str) -> list[str]:
+    text = normalize_spaces(text)
+    if not should_split_single_benfeitoria_block(text):
+        return [text] if text else []
+
+    sentences = split_sentences_pt(text)
+    if len(sentences) > 1:
+        return group_text_blocks(sentences, target_length=320)
+
+    listed_blocks = split_listed_benfeitoria_items(text)
+    return listed_blocks or [text]
+
+
+def should_split_single_benfeitoria_block(text: str) -> bool:
+    normalized = normalize_key(text)
+    if any(
+        marker in normalized
+        for marker in (
+            "nao_foram_detalhadas",
+            "nao_foram_detalhados",
+            "nao_foram_discriminadas",
+            "nao_foram_discriminados",
+            "nao_foram_informadas",
+            "nao_foram_informados",
+            "nao_dispoe",
+            "nao_detalhou",
+        )
+    ):
+        return False
+
+    concrete_terms = (
+        "curral",
+        "piquete",
+        "cocho",
+        "bebedouro",
+        "galpao",
+        "barracao",
+        "casa",
+        "cerca",
+        "tanque",
+        "poco",
+        "represa",
+        "silo",
+        "trincheira",
+        "confinamento",
+        "energia",
+        "placa_solar",
+        "pastagem",
+    )
+    hits = {term for term in concrete_terms if term in normalized}
+    return len(hits) >= 3 or (len(hits) >= 2 and len(text) >= 320)
+
+
+def split_sentences_pt(text: str) -> list[str]:
+    return [
+        sentence.strip()
+        for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z0-9])", text)
+        if sentence.strip()
+    ]
+
+
+def group_text_blocks(parts: list[str], target_length: int = 320) -> list[str]:
+    blocks: list[str] = []
+    current = ""
+    for part in parts:
+        candidate = f"{current} {part}".strip() if current else part
+        if current and len(candidate) > target_length:
+            blocks.append(current)
+            current = part
+            continue
+        current = candidate
+    if current:
+        blocks.append(current)
+    return blocks
+
+
+def split_listed_benfeitoria_items(text: str) -> list[str]:
+    match = re.match(
+        r"^(?P<prefix>.*?\b(?:foi informado|foi informada|foram informados|foram informadas|conta com|disp[oÃµ]e de|possui|inclui)\b)\s+(?P<tail>.+)$",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return []
+
+    tail = match.group("tail").strip()
+    tail = re.sub(
+        r"\s+e\s+(?=(?:curral|piquete|cocho|bebedouro|galp[aÃ£]o|barrac[aÃ£]o|casa|cerca|tanque|po[cÃ§]o|represa|silo|trincheira|confinamento|pastagem)\b)",
+        ", ",
+        tail,
+        flags=re.IGNORECASE,
+    )
+    items = [item.strip(" .;") for item in tail.split(",") if item.strip(" .;")]
+    if len(items) < 2:
+        return []
+
+    blocks = [f"{match.group('prefix').strip()} {items[0]}."]
+    blocks.extend(group_text_blocks([f"{item}." for item in items[1:]], target_length=240))
     return blocks
 
 

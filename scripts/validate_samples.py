@@ -239,6 +239,22 @@ BENFEITORIA_SPLIT_TEXT = (
 )
 
 
+LUIZ_SHORT_TEXT = """
+Luiz de paula
+
+Fazenda propria
+8 alqueires
+
+49 vacas e 2 bois - Cria
+Gado nelore
+6 piquetes
+Curral com capacidade para 100 animais
+Cocho coberto nos piquetes
+Bebedouro nos piquetes
+Pastagem brachiarao
+"""
+
+
 def assert_equal(actual, expected, label: str) -> None:
     if isinstance(expected, float):
         if round(float(actual), 2) != round(expected, 2):
@@ -315,6 +331,13 @@ def main() -> None:
         True,
         "visao geral das benfeitorias em outros comentarios",
     )
+
+    luiz_report = generate_technical_report(LUIZ_SHORT_TEXT).report_text
+    luiz_output = generate_report(luiz_report, output_path=OUTPUT_DIR / "luiz-benfeitorias-curtas.xlsx")
+    luiz_worksheet = load_workbook(luiz_output).active
+    assert_equal(luiz_worksheet["A27"].value.startswith("Na Fazenda"), True, "luiz benfeitorias primeiro quadro")
+    assert_equal("Curral" in (luiz_worksheet["A30"].value or ""), True, "luiz benfeitorias segundo quadro")
+    assert_equal(luiz_worksheet["F30"].value, "X", "luiz conservacao segundo quadro")
 
     manual_text = (
         "Cliente: Maria Souza\n"
