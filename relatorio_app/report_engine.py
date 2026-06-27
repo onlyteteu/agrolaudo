@@ -907,7 +907,16 @@ def generate_report(
     apply_benfeitoria_blocks(worksheet, data, benfeitoria_blocks, row_offset)
     apply_property_rows(worksheet, data)
     apply_equipment(worksheet, data.get("equipamentos", []), below_benfeitoria_offset)
-    apply_insumos(worksheet, data.get("insumos", {}), below_benfeitoria_offset)
+    # Insumos: uniao de duas fontes que NUNCA inventam.
+    #  - rede de seguranca deterministica: marca so o que esta literalmente
+    #    escrito (corrego/tanque -> agua; placa solar -> energia), cobrindo
+    #    casos em que a IA, por ser nao-deterministica, esquece de marcar;
+    #  - decisao da IA: refina com logica de contexto.
+    insumos = infer_insumos(data)
+    ai_insumos = data.get("insumos")
+    if isinstance(ai_insumos, dict):
+        insumos.update(ai_insumos)
+    apply_insumos(worksheet, insumos, below_benfeitoria_offset)
     apply_perspectivas(worksheet, data.get("perspectivas", {}), below_benfeitoria_offset)
     polish_written_ranges(worksheet, row_offset, below_benfeitoria_offset)
     adjust_dynamic_row_heights(worksheet)
@@ -1161,14 +1170,14 @@ def apply_property_rows(worksheet: Worksheet, data: dict[str, Any]) -> None:
     clear_property_rows(worksheet, max(PROPERTY_BASE_CAPACITY, len(properties)))
     for index, item in enumerate(properties):
         row = PROPERTY_START_ROW + index
-        set_cell(worksheet, f"A{row}", item.get("nome"))
+        set_cell(worksheet, f"A{row}", upper_field(item.get("nome")))
         set_cell(worksheet, f"D{row}", item.get("area_total_ha"))
         set_cell(worksheet, f"E{row}", item.get("area_pastagens_ha"))
         set_cell(worksheet, f"F{row}", item.get("area_cultivo_ha"))
         set_cell(worksheet, f"G{row}", item.get("area_financiada_bb_ha"))
         set_cell(worksheet, f"H{row}", item.get("area_financiada_outros_ha"))
-        set_cell(worksheet, f"I{row}", item.get("atividade_principal"))
-        set_cell(worksheet, f"K{row}", item.get("principais_culturas"))
+        set_cell(worksheet, f"I{row}", upper_field(item.get("atividade_principal")))
+        set_cell(worksheet, f"K{row}", upper_field(item.get("principais_culturas")))
 
 
 def clear_property_rows(worksheet: Worksheet, row_count: int) -> None:
@@ -1365,12 +1374,19 @@ def apply_fields(worksheet: Worksheet, data: dict[str, Any], row_offset: int = 0
 
 def build_client_block(data: dict[str, Any]) -> str | None:
     if data.get("resumo_cliente"):
-        return str(data["resumo_cliente"])
+        return upper_field(str(data["resumo_cliente"]))
 
     if data.get("cliente"):
-        return str(data["cliente"]).strip() or None
+        return upper_field(str(data["cliente"]).strip()) or None
 
     return None
+
+
+def upper_field(value: Any) -> Any:
+    """Caixa alta para os campos da tabela de discriminacao (cliente, imovel,
+    atividade, culturas), seguindo o padrao dos modelos aprovados. Nao se aplica
+    aos textos de benfeitorias/comentarios/conclusao, que ficam em caixa normal."""
+    return value.upper() if isinstance(value, str) else value
 
 
 def build_property_line(data: dict[str, Any]) -> str | None:
@@ -1416,6 +1432,96 @@ def apply_equipment(worksheet: Worksheet, equipment: Any, row_offset: int = 0) -
             value = normalized_item.get(field)
             if value not in (None, ""):
                 set_cell(worksheet, f"{col}{row}", value)
+
+
+def infer_insumos(data: dict[str, Any]) -> dict[str, bool]:
+    """Marca insumos SOMENTE quando ha evidencia explicita no relatorio.
+
+    Nunca inventa: agua so com mencao a bebedouro/poco/corrego/tanque/represa/
+    nascente/acude/piscicultura; energia so com placa solar/fotovoltaica/rede
+    eletrica/gerador; pastagens so com mencao a pasto/piquete/capim/braquiaria.
+    """
+    blob = _gather_evidence_text(data)
+    if not blob:
+        return {}
+
+    evidence = {
+        "agua": (
+            "bebedouro",
+            "poco",
+            "artesiano",
+            "corrego",
+            "represa",
+            "tanque",
+            "nascente",
+            "acude",
+            "piscicultura",
+            "lamina_d",
+            "reservatorio",
+        ),
+        "energia_eletrica": (
+            "placa_solar",
+            "placas_solar",
+            "fotovoltaic",
+            "energia_eletrica",
+            "rede_eletrica",
+            "trifasic",
+            "gerador",
+            "painel_solar",
+        ),
+        "pastagens": (
+            "pastagem",
+            "pasto",
+            "piquete",
+            "braquiar",
+            "brachiar",
+            "andropogon",
+            "quicuia",
+            "mombaca",
+            "capim",
+        ),
+    }
+    marks: dict[str, bool] = {}
+    for key, terms in evidence.items():
+        if any(term in blob for term in terms):
+            marks[key] = True
+    return marks
+
+
+def _gather_evidence_text(data: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for field in (
+        "benfeitorias_descricao",
+        "benfeitorias_observacoes",
+        "outros_comentarios",
+        "investimentos_comentarios",
+        "insumos_comentarios",
+        "conclusao",
+        "principais_culturas",
+        "atividade_principal",
+        "raw_text",
+    ):
+        value = data.get(field)
+        if value:
+            parts.append(str(value))
+    for item in (data.get("imoveis") or []):
+        if isinstance(item, dict):
+            parts.extend(str(item.get(key, "")) for key in ("atividade_principal", "principais_culturas", "nome"))
+    return normalize_key(_drop_negated_clauses(" ".join(parts)))
+
+
+def _drop_negated_clauses(text: str) -> str:
+    """Remove trechos negados para a rede de seguranca nao marcar por engano.
+
+    Ex.: 'nao ha energia eletrica' ou 'sem poco artesiano' nao devem virar
+    evidencia de energia/agua.
+    """
+    negation = re.compile(r"\b(?:n[aã]o|sem|inexist\w*|aus[eê]nc\w*|destitu\w*)\b", re.IGNORECASE)
+    kept: list[str] = []
+    for clause in re.split(r"[.;,\n]", text):
+        if not negation.search(clause):
+            kept.append(clause)
+    return " ".join(kept)
 
 
 def apply_insumos(worksheet: Worksheet, insumos: Any, row_offset: int = 0) -> None:

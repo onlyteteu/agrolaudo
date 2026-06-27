@@ -524,21 +524,18 @@ def resolve_pasture_alqueires(prop: PropertyNote) -> float:
     if prop.livestock_area_alqueires:
         return prop.livestock_area_alqueires
     if (prop.pastures or prop.livestock) and prop.area_alqueires is not None:
-        if prop.crop_area_alqueires == 0 and prop.confinement_area_alqueires == 0:
-            return round(prop.area_alqueires * 0.70, 2)
+        # Pastagem = area total menos o que for lavoura/confinamento declarado.
+        # Sem lavoura declarada, toda a area vira pastagem (segue os modelos
+        # reais; nao inventa divisao de cultivo).
         remaining = prop.area_alqueires - prop.crop_area_alqueires - prop.confinement_area_alqueires
         return max(remaining, 0.0)
     return 0.0
 
 
 def resolve_crop_alqueires(prop: PropertyNote) -> float:
-    explicit = prop.crop_area_alqueires + prop.confinement_area_alqueires
-    if explicit:
-        return explicit
-    if (prop.pastures or prop.livestock) and prop.area_alqueires is not None:
-        pasture = resolve_pasture_alqueires(prop)
-        return max(prop.area_alqueires - pasture, 0.0)
-    return 0.0
+    # Cultivo so existe quando ha lavoura ou confinamento informados. Caso
+    # contrario fica 0 (nunca uma fracao inventada da area total).
+    return prop.crop_area_alqueires + prop.confinement_area_alqueires
 
 
 def alqueires_to_hectares(value: float | None) -> float:

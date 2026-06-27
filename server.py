@@ -129,7 +129,8 @@ class ReportHandler(BaseHTTPRequestHandler):
         pattern_selection = select_pattern_examples(raw_text)
         response = writer_run.to_payload()
         response["pattern_library"] = pattern_selection.to_payload()
-        response["review"] = build_review_payload(parse_report_data(result.report_text))
+        structured = writer_run.structured if writer_run.structured is not None else parse_report_data(result.report_text)
+        response["review"] = build_review_payload(structured)
         self.respond_json(response)
 
     def serve_output_file(self) -> None:
@@ -278,25 +279,56 @@ def parse_review_data(review_data_raw: str, original_text: str) -> dict | None:
     if not review_data_raw:
         return None
 
-    base = parse_report_data(original_text)
     try:
         reviewed = json.loads(review_data_raw)
     except json.JSONDecodeError:
-        return base
+        return parse_report_data(original_text)
 
     if not isinstance(reviewed, dict):
-        return base
+        return parse_report_data(original_text)
 
     parsed = reviewed.get("parsed")
-    if isinstance(parsed, dict):
-        base.update(parsed)
+    if isinstance(parsed, dict) and parsed.get("_structured"):
+        # Dados vieram estruturados da IA: sao a fonte de verdade, sem releitura
+        # por regex que poderia reintroduzir valores antigos.
+        base = dict(parsed)
+    else:
+        base = parse_report_data(original_text)
+        if isinstance(parsed, dict):
+            base.update(parsed)
 
     edited_fields = reviewed.get("fields")
     if isinstance(edited_fields, dict):
         for key, value in edited_fields.items():
             base[key] = coerce_review_value(key, value)
 
+    sync_single_property(base)
     return base
+
+
+def sync_single_property(data: dict) -> None:
+    """Numa propriedade unica, os campos revisados (areas, atividade, culturas)
+    representam essa propriedade. Sincroniza o item para a correcao do agronomo
+    aparecer nas celulas D18/E18/F18 etc."""
+    properties = data.get("imoveis")
+    if not isinstance(properties, list) or len(properties) != 1:
+        return
+    item = properties[0]
+    if not isinstance(item, dict):
+        return
+    for key in (
+        "area_total_ha",
+        "area_pastagens_ha",
+        "area_cultivo_ha",
+        "area_financiada_bb_ha",
+        "area_financiada_outros_ha",
+        "atividade_principal",
+        "principais_culturas",
+    ):
+        if data.get(key) not in (None, ""):
+            item[key] = data[key]
+    if data.get("imovel_nome"):
+        item["nome"] = data["imovel_nome"]
 
 
 def coerce_review_value(key: str, value):

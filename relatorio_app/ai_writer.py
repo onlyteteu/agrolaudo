@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from .env import load_env_file
 from .pattern_library import build_writer_prompt, select_pattern_examples
 from .report_engine import parse_report_data
+from .report_schema import REPORT_JSON_SCHEMA, build_extraction_prompt, coerce_structured_data
 from .technical_writer import TechnicalReportResult, generate_technical_report
 
 GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
@@ -23,6 +24,10 @@ class WriterRun:
     provider: str
     model: str
     fallback_reason: str = ""
+    # Dados estruturados que alimentam a planilha. Vem da IA (com marca
+    # "_structured") quando possivel, ou da releitura por regex como fallback.
+    structured: dict | None = None
+    structured_source: str = "regex"
 
     def to_payload(self) -> dict:
         payload = self.result.to_payload()
@@ -31,6 +36,7 @@ class WriterRun:
             "provider": self.provider,
             "model": self.model,
             "fallback_reason": self.fallback_reason,
+            "structured_source": self.structured_source,
         }
         return payload
 
@@ -48,6 +54,8 @@ def generate_technical_report_auto(raw_text: str) -> WriterRun:
             provider="local",
             model="local-rules-v1",
             fallback_reason="GEMINI_API_KEY não configurada.",
+            structured=parse_report_data(local_result.report_text),
+            structured_source="regex",
         )
 
     try:
@@ -62,11 +70,19 @@ def generate_technical_report_auto(raw_text: str) -> WriterRun:
         parsed = parse_report_data(report_text)
         if not parsed.get("cliente") or not parsed.get("imovel_nome"):
             raise GeminiWriterError("A resposta da IA não trouxe campos mínimos reconhecíveis.")
+
+        # Extracao estruturada: a IA devolve os campos diretamente (fonte da
+        # verdade). Se falhar, caimos para a releitura por regex acima.
+        structured, structured_source = resolve_structured_data(
+            raw_text, report_text, parsed, api_key=api_key, model=model
+        )
         return WriterRun(
             result=TechnicalReportResult(report_text=report_text, notes=local_result.notes, source=f"gemini:{model}"),
             used_ai=True,
             provider="gemini",
             model=model,
+            structured=structured,
+            structured_source=structured_source,
         )
     except Exception as exc:
         return WriterRun(
@@ -75,7 +91,55 @@ def generate_technical_report_auto(raw_text: str) -> WriterRun:
             provider="local",
             model="local-rules-v1",
             fallback_reason=f"Gemini indisponível: {exc}",
+            structured=parse_report_data(local_result.report_text),
+            structured_source="regex",
         )
+
+
+def resolve_structured_data(
+    raw_text: str,
+    report_text: str,
+    regex_parsed: dict,
+    *,
+    api_key: str,
+    model: str,
+) -> tuple[dict, str]:
+    """Tenta a extracao estruturada via IA; cai para regex se nao for confiavel."""
+    try:
+        structured = extract_structured_report(raw_text, report_text, api_key=api_key, model=model)
+        if structured_is_sane(structured):
+            return structured, "gemini-json"
+    except Exception:
+        pass
+    return regex_parsed, "regex"
+
+
+def structured_is_sane(structured: dict) -> bool:
+    """Guardrail contra extracoes ruins da IA (areas zeradas, culturas com lixo).
+
+    A IA e nao-deterministica: se a saida nao passar nestes checks basicos,
+    descartamos e usamos o parser deterministico (regex sobre o texto tecnico).
+    """
+    if not structured.get("cliente") or not structured.get("imovel_nome"):
+        return False
+    imoveis = structured.get("imoveis") or []
+    if not imoveis:
+        return False
+    for item in imoveis:
+        if not isinstance(item, dict):
+            return False
+        total = item.get("area_total_ha")
+        if not isinstance(total, (int, float)) or total <= 0:
+            return False
+        pasture = item.get("area_pastagens_ha") or 0
+        crop = item.get("area_cultivo_ha") or 0
+        if isinstance(pasture, (int, float)) and isinstance(crop, (int, float)):
+            if pasture + crop > total * 1.1 + 1:
+                return False
+        cultures = str(item.get("principais_culturas") or "")
+        if "hectare" in cultures.lower() or len(cultures) > 90:
+            return False
+    return True
 
 
 class GeminiWriterError(RuntimeError):
@@ -187,6 +251,71 @@ def request_gemini_report(prompt: str, *, api_key: str, model: str) -> str:
     if not text.strip():
         raise GeminiWriterError("resposta vazia do Gemini.")
     return sanitize_report_text(text)
+
+
+def extract_structured_report(raw_text: str, report_text: str, *, api_key: str, model: str) -> dict:
+    """Extrai os campos estruturados via Gemini (responseSchema) e os normaliza."""
+    prompt = build_extraction_prompt(raw_text, report_text)
+    ai_data = request_gemini_json(prompt, REPORT_JSON_SCHEMA, api_key=api_key, model=model)
+    return coerce_structured_data(ai_data)
+
+
+def request_gemini_json(prompt: str, schema: dict, *, api_key: str, model: str) -> dict:
+    """Chama o Gemini forcando saida JSON conforme o schema e devolve o dict."""
+    timeout = parse_timeout(os.environ.get("GEMINI_TIMEOUT_SECONDS"))
+    endpoint = (
+        f"{GEMINI_API_BASE_URL}/models/"
+        f"{urllib.parse.quote(model, safe='')}:generateContent"
+        f"?key={urllib.parse.quote(api_key, safe='')}"
+    )
+    payload = {
+        "contents": [
+            {
+                "role": "user",
+                "parts": [{"text": prompt}],
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.1,
+            "topP": 0.9,
+            "maxOutputTokens": 8192,
+            "responseMimeType": "application/json",
+            "responseSchema": schema,
+        },
+    }
+    request = urllib.request.Request(
+        endpoint,
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json; charset=utf-8"},
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            response_payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise GeminiWriterError(extract_http_error_message(exc)) from exc
+    except urllib.error.URLError as exc:
+        raise GeminiWriterError(str(exc.reason)) from exc
+
+    text = extract_text_from_gemini_response(response_payload)
+    if not text.strip():
+        raise GeminiWriterError("resposta estruturada vazia do Gemini.")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return json.loads(strip_json_fences(text))
+
+
+def strip_json_fences(text: str) -> str:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.removeprefix("```").strip()
+        if cleaned.lower().startswith("json"):
+            cleaned = cleaned[4:].strip()
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3].strip()
+    return cleaned
 
 
 def parse_timeout(value: str | None) -> int:

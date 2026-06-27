@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from relatorio_app.pattern_library import build_writer_prompt, classify_case_tags, load_pattern_examples, select_pattern_examples
-from relatorio_app.report_engine import generate_report, parse_decimal_pt, parse_report_data
+from relatorio_app.report_engine import generate_report, infer_insumos, parse_decimal_pt, parse_report_data
 from relatorio_app.technical_writer import generate_technical_report
 from server import parse_review_data
 
@@ -34,7 +34,7 @@ CASES = [
             "principais_culturas": "Pastagens forrageiras destinadas ao pastejo do rebanho leiteiro e de corte",
         },
         "cells": {
-            "A18": "Sítio Pedro Rosa (Fazenda Santa Bárbara)",
+            "A18": "SÍTIO PEDRO ROSA (FAZENDA SANTA BÁRBARA)",
             "D18": 53.24,
             "E18": 37.27,
             "F18": 15.97,
@@ -59,7 +59,7 @@ CASES = [
             "principais_culturas": "Mandioca",
         },
         "cells": {
-            "A18": "Fazenda Água Branca",
+            "A18": "FAZENDA ÁGUA BRANCA",
             "D18": 29.04,
             "E18": 0,
             "F18": 29.04,
@@ -276,8 +276,8 @@ def main() -> None:
 
     multiple_output = generate_report(MULTIPLE_PROPERTY_TEXT, output_path=OUTPUT_DIR / "multiplas-propriedades.xlsx")
     multiple_worksheet = load_workbook(multiple_output).active
-    assert_equal(multiple_worksheet["A18"].value, "Fazenda Boa Vista", "primeira propriedade celula A18")
-    assert_equal(multiple_worksheet["A19"].value, "Fazenda Santa Luzia", "segunda propriedade celula A19")
+    assert_equal(multiple_worksheet["A18"].value, "FAZENDA BOA VISTA", "primeira propriedade celula A18")
+    assert_equal(multiple_worksheet["A19"].value, "FAZENDA SANTA LUZIA", "segunda propriedade celula A19")
 
     phrase = parse_report_data("O produtor explora as fazendas Fazenda Primavera e Fazenda Santa Clara localizadas em Morrinhos-GO.")
     assert_equal(phrase.get("imoveis"), [{"nome": "Fazenda Primavera"}, {"nome": "Fazenda Santa Clara"}], "multiplas propriedades em frase")
@@ -292,11 +292,11 @@ def main() -> None:
 
     sandro_output = generate_report(SANDRO_STYLE_TEXT, output_path=OUTPUT_DIR / "sandro-multiplas-propriedades.xlsx")
     sandro_worksheet = load_workbook(sandro_output).active
-    assert_equal(sandro_worksheet["A18"].value, "Fazenda Boa Sorte", "sandro propriedade linha 18")
-    assert_equal(sandro_worksheet["A19"].value, "Fazenda Sao Judas", "sandro propriedade linha 19")
-    assert_equal(sandro_worksheet["A20"].value, "Fazenda Santa Camila", "sandro propriedade linha 20")
-    assert_equal(sandro_worksheet["A21"].value, "Fazenda Sao Jose dos Anjicos", "sandro propriedade linha 21")
-    assert_equal(sandro_worksheet["A22"].value, "Fazenda Santa Carolina", "sandro propriedade linha 22")
+    assert_equal(sandro_worksheet["A18"].value, "FAZENDA BOA SORTE", "sandro propriedade linha 18")
+    assert_equal(sandro_worksheet["A19"].value, "FAZENDA SAO JUDAS", "sandro propriedade linha 19")
+    assert_equal(sandro_worksheet["A20"].value, "FAZENDA SANTA CAMILA", "sandro propriedade linha 20")
+    assert_equal(sandro_worksheet["A21"].value, "FAZENDA SAO JOSE DOS ANJICOS", "sandro propriedade linha 21")
+    assert_equal(sandro_worksheet["A22"].value, "FAZENDA SANTA CAROLINA", "sandro propriedade linha 22")
     assert_equal(sandro_worksheet["D22"].value, 821.0, "sandro area quinta propriedade")
     assert_equal(sandro_worksheet["A24"].value, "3        BENFEITORIAS", "sandro secao benfeitorias deslocada")
     assert_equal(sandro_worksheet["A28"].value, "O complexo pecuario apresenta infraestrutura integrada e alto padrao tecnico.", "sandro texto benfeitorias deslocado")
@@ -323,7 +323,7 @@ def main() -> None:
     assert_equal(benfeitoria_split.get("cliente"), "Sandro Mabel", "nome do cliente extraido de paragrafo tecnico")
     benfeitoria_output = generate_report(BENFEITORIA_SPLIT_TEXT, output_path=OUTPUT_DIR / "benfeitorias-em-caixas.xlsx")
     benfeitoria_worksheet = load_workbook(benfeitoria_output).active
-    assert_equal(benfeitoria_worksheet["B4"].value, "Sandro Mabel", "cliente escrito somente como nome")
+    assert_equal(benfeitoria_worksheet["B4"].value, "SANDRO MABEL", "cliente escrito somente como nome")
     assert_equal(benfeitoria_worksheet["A27"].value.startswith("Na Fazenda Boa Sorte"), True, "benfeitorias primeira fazenda")
     assert_equal(benfeitoria_worksheet["A30"].value.startswith("Na Fazenda Sao Judas"), True, "benfeitorias segunda fazenda")
     assert_equal(
@@ -338,6 +338,15 @@ def main() -> None:
     assert_equal(luiz_worksheet["A27"].value.startswith("Na Fazenda"), True, "luiz benfeitorias primeiro quadro")
     assert_equal("Curral" in (luiz_worksheet["A30"].value or ""), True, "luiz benfeitorias segundo quadro")
     assert_equal(luiz_worksheet["F30"].value, "X", "luiz conservacao segundo quadro")
+    # Pecuaria pura: cultivo 0 e pastagem = total (sem divisao 70/30 inventada).
+    luiz_parsed = parse_report_data(luiz_report)
+    assert_equal(luiz_parsed.get("area_cultivo_ha"), 0.0, "luiz cultivo zero (sem lavoura)")
+    assert_equal(luiz_parsed.get("area_pastagens_ha"), luiz_parsed.get("area_total_ha"), "luiz pastagem = area total")
+    # Insumos inferidos SOMENTE por evidencia: bebedouro -> agua; sem placa solar -> sem energia.
+    luiz_insumos = infer_insumos(luiz_parsed)
+    assert_equal(luiz_insumos.get("agua"), True, "luiz agua inferida do bebedouro")
+    assert_equal(luiz_insumos.get("pastagens"), True, "luiz pastagens inferida do pasto")
+    assert_equal(luiz_insumos.get("energia_eletrica"), None, "luiz sem energia (nao ha placa solar)")
 
     manual_text = (
         "Cliente: Maria Souza\n"
@@ -375,15 +384,15 @@ def main() -> None:
     assert_equal(technical_parsed.get("cliente"), "Arnaldo Moreira", "texto tecnico campo cliente")
     assert_equal(technical_parsed.get("cpf_cnpj"), "863.546.041-34", "texto tecnico campo cpf")
     assert_equal(technical_parsed.get("area_total_ha"), 271.04, "texto tecnico area total")
-    assert_equal(technical_parsed.get("area_pastagens_ha"), 162.62, "texto tecnico area pastagens")
-    assert_equal(technical_parsed.get("area_cultivo_ha"), 108.42, "texto tecnico area cultivo")
+    assert_equal(technical_parsed.get("area_pastagens_ha"), 188.76, "texto tecnico area pastagens")
+    assert_equal(technical_parsed.get("area_cultivo_ha"), 82.28, "texto tecnico area cultivo")
     assert_equal(technical_parsed.get("principais_culturas"), "Milho, Pastagens de Braquiarão", "texto tecnico culturas")
     assert_equal(len(technical_parsed.get("equipamentos", [])), 12, "texto tecnico equipamentos")
     technical_output = generate_report(technical_result.report_text, output_path=OUTPUT_DIR / "arnaldo-dados-brutos.xlsx")
     technical_worksheet = load_workbook(technical_output).active
-    assert_equal(technical_worksheet["B4"].value, "Arnaldo Moreira", "texto tecnico cliente excel")
-    assert_equal(technical_worksheet["A18"].value, "Fazenda Santa Rita", "texto tecnico primeira propriedade excel")
-    assert_equal(technical_worksheet["A21"].value, "Fazenda Engenho de São Benedito", "texto tecnico quarta propriedade excel")
+    assert_equal(technical_worksheet["B4"].value, "ARNALDO MOREIRA", "texto tecnico cliente excel")
+    assert_equal(technical_worksheet["A18"].value, "FAZENDA SANTA RITA", "texto tecnico primeira propriedade excel")
+    assert_equal(technical_worksheet["A21"].value, "FAZENDA ENGENHO DE SÃO BENEDITO", "texto tecnico quarta propriedade excel")
     assert_equal(technical_worksheet["D18"].value, 19.36, "texto tecnico area primeira propriedade excel")
     assert_equal(technical_worksheet["A46"].value, None, "texto tecnico limpa equipamento antigo")
     assert_equal(technical_worksheet["A51"].value, "Plantadeira Baldan 10 Linhas", "texto tecnico primeiro equipamento excel")
@@ -402,29 +411,29 @@ def main() -> None:
     sandro_parsed = parse_report_data(sandro_result.report_text)
     assert_equal(len(sandro_result.notes.properties), 3, "redator sandro quantidade propriedades")
     assert_equal(sandro_parsed.get("area_total_ha"), 7681.08, "redator sandro area total")
-    assert_equal(sandro_parsed.get("area_pastagens_ha"), 5376.76, "redator sandro area pastagens")
-    assert_equal(sandro_parsed.get("area_cultivo_ha"), 2304.32, "redator sandro area cultivo")
+    assert_equal(sandro_parsed.get("area_pastagens_ha"), 7681.08, "redator sandro area pastagens")
+    assert_equal(sandro_parsed.get("area_cultivo_ha"), 0.0, "redator sandro area cultivo")
 
     approved_pattern_cases = {
         "divino_piscicultura_pecuaria": {
             "tags": ("piscicultura", "area_alugada", "pecuaria_corte"),
             "properties": 2,
-            "areas": (33.88, 23.72, 10.16),
+            "areas": (33.88, 33.88, 0.0),
         },
         "alfredo_ciclo_completo_confinamento": {
             "tags": ("ciclo_completo", "confinamento_seca", "piquetes"),
             "properties": 2,
-            "areas": (532.40, 372.68, 159.72),
+            "areas": (532.40, 532.40, 0.0),
         },
         "socrates_pecuaria_duas_unidades": {
             "tags": ("poco_artesiano", "rotacionado", "multi_propriedades"),
             "properties": 2,
-            "areas": (329.31, 230.53, 98.79),
+            "areas": (329.31, 329.31, 0.0),
         },
         "vanderlei_recria_projetos_futuros": {
             "tags": ("projetos_futuros", "reforma_pastagem", "aquisicao_animais"),
             "properties": 1,
-            "areas": (94.38, 66.07, 28.31),
+            "areas": (94.38, 94.38, 0.0),
         },
     }
     for example_id, expectations in approved_pattern_cases.items():
