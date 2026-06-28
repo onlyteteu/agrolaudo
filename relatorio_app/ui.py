@@ -434,8 +434,8 @@ def _rail(active: str) -> str:
       </div>
       <div class="rail-foot">
         <div class="rail-card">
-          <strong>Mais ferramentas a caminho</strong>
-          <span>Este e o primeiro modulo do hub para o agro.</span>
+          <strong>Relatorio em minutos</strong>
+          <span>Cole as anotacoes da vistoria e baixe a planilha pronta no padrao do laudo.</span>
         </div>
         <span class="rail-tag">Beta</span>
       </div>
@@ -452,12 +452,6 @@ def render_home() -> str:
   <title>{BRAND}</title>
   <style>
     {_base_css()}
-    .tools-grid {{
-      display: grid;
-      grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
-      gap: 18px;
-      align-items: stretch;
-    }}
     .tool-card {{
       position: relative;
       border: 1px solid var(--line);
@@ -606,47 +600,89 @@ def render_home() -> str:
     }}
     .visual-badge svg {{ width: 22px; height: 22px; }}
 
-    /* Card "em breve" */
-    .soon-card {{
-      border: 1px dashed var(--line-strong);
-      border-radius: var(--radius-lg);
-      background: linear-gradient(160deg, rgba(255,255,255,.7), var(--surface-soft));
-      padding: 26px;
-      display: flex;
-      flex-direction: column;
+    /* Como funciona (passos) */
+    .steps-row {{
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
       gap: 14px;
     }}
-    .soon-badge {{
-      width: fit-content;
-      padding: 6px 12px;
-      border-radius: 999px;
-      background: var(--forest-50);
-      color: var(--forest-700);
-      font-size: 11px;
+    .step-card {{
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(160deg, #fff, var(--surface-soft));
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+    }}
+    .step-card .num {{
+      width: 34px;
+      height: 34px;
+      border-radius: 11px;
+      display: grid;
+      place-items: center;
       font-weight: 900;
-      letter-spacing: .08em;
-      text-transform: uppercase;
+      color: var(--forest-950);
+      background: linear-gradient(135deg, var(--lime), var(--lime-strong));
+      margin-bottom: 13px;
     }}
-    .soon-card h3 {{ margin: 0; font-size: 19px; color: var(--forest-950); letter-spacing: -.01em; }}
-    .soon-card p {{ margin: 0; color: var(--muted); font-size: 14px; line-height: 1.55; }}
-    .soon-list {{ list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 9px; }}
-    .soon-list li {{ display: flex; align-items: center; gap: 10px; color: var(--forest-900); font-size: 13.5px; font-weight: 650; }}
-    .soon-list li::before {{
-      content: "";
-      width: 22px; height: 22px;
-      border-radius: 7px;
-      flex: 0 0 auto;
-      background: var(--surface);
-      border: 1px solid var(--line-strong);
-      background-image: linear-gradient(135deg, transparent 46%, var(--forest-600) 46% 54%, transparent 54%);
-    }}
+    .step-card h4 {{ margin: 0 0 5px; font-size: 15.5px; color: var(--forest-950); letter-spacing: -.01em; }}
+    .step-card p {{ margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5; }}
 
-    @media (max-width: 1100px) {{
-      .tools-grid {{ grid-template-columns: 1fr; }}
+    /* Por que usar (beneficios) */
+    .benefits {{
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
     }}
+    .benefit {{
+      display: flex;
+      gap: 13px;
+      align-items: flex-start;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(160deg, #fff, var(--surface-soft));
+      padding: 18px;
+      box-shadow: var(--shadow-sm);
+    }}
+    .benefit-icon {{
+      width: 42px;
+      height: 42px;
+      flex: 0 0 auto;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      color: var(--forest-700);
+      background: linear-gradient(150deg, var(--forest-100), rgba(194,242,77,.32));
+      box-shadow: inset 0 0 0 1px rgba(35,122,75,.14);
+    }}
+    .benefit-icon svg {{ width: 22px; height: 22px; }}
+    .benefit h4 {{ margin: 0 0 4px; font-size: 15px; color: var(--forest-950); letter-spacing: -.01em; }}
+    .benefit p {{ margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5; }}
+
+    /* Faixa de chamada */
+    .cta-band {{
+      margin-top: 18px;
+      border-radius: var(--radius-lg);
+      padding: 22px 26px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+      color: #fff;
+      background:
+        radial-gradient(circle at 90% -40%, rgba(194,242,77,.30), transparent 50%),
+        linear-gradient(120deg, var(--forest-950), var(--forest-700));
+      box-shadow: var(--shadow);
+    }}
+    .cta-band strong {{ display: block; font-size: 18px; letter-spacing: -.01em; }}
+    .cta-band span {{ display: block; margin-top: 3px; color: rgba(255,255,255,.8); font-size: 14px; }}
+
     @media (max-width: 720px) {{
       .tool-inner {{ grid-template-columns: 1fr; }}
       .visual {{ min-height: 280px; }}
+      .steps-row {{ grid-template-columns: 1fr; }}
+      .benefits {{ grid-template-columns: 1fr; }}
+      .cta-band {{ flex-direction: column; align-items: flex-start; }}
     }}
   </style>
 </head>
@@ -658,9 +694,9 @@ def render_home() -> str:
         <section class="hero">
           <div class="hero-top">
             <div>
-              <span class="eyebrow">Hub de ferramentas para o agro</span>
+              <span class="eyebrow">Relatorio de credito rural</span>
               <h1>Do campo ao documento,<br><span class="accent">sem retrabalho.</span></h1>
-              <p class="lead">Com <strong style="color:#dff5b6;font-weight:850">IA integrada</strong>, transforme anotacoes de vistoria em laudos e planilhas organizadas. Comece pelo relatorio de credito rural &mdash; novas ferramentas chegam em breve.</p>
+              <p class="lead">Com <strong style="color:#dff5b6;font-weight:850">IA integrada</strong>, transforme as anotacoes da vistoria em uma planilha de credito rural completa &mdash; com texto tecnico, fotos numeradas e tudo no padrao do laudo.</p>
             </div>
           </div>
           <div class="hero-actions" style="margin-top:24px">
@@ -673,9 +709,7 @@ def render_home() -> str:
           </div>
         </section>
 
-        <div class="section-label">Ferramentas disponiveis</div>
-        <div class="tools-grid">
-          <section class="tool-card" aria-label="Relatorio de credito rural">
+        <section class="tool-card" aria-label="Relatorio de credito rural">
             <div class="tool-inner">
               <article class="tool-main">
                 <div class="tool-icon">
@@ -721,16 +755,54 @@ def render_home() -> str:
             </div>
           </section>
 
-          <section class="soon-card" aria-label="Proximas ferramentas">
-            <span class="soon-badge">Em breve</span>
-            <h3>O hub vai crescer</h3>
-            <p>A visao e reunir num so lugar as ferramentas do dia a dia de quem trabalha no agro.</p>
-            <ul class="soon-list">
-              <li>Mais modelos de laudo</li>
-              <li>Calculos e conversoes de campo</li>
-              <li>Biblioteca de modelos reaproveitaveis</li>
-            </ul>
-          </section>
+        <div class="section-label">Como funciona</div>
+        <div class="steps-row">
+          <div class="step-card">
+            <div class="num">1</div>
+            <h4>Cole as anotacoes</h4>
+            <p>Jogue o texto bruto da vistoria e anexe as fotos, do jeito que recebeu do campo.</p>
+          </div>
+          <div class="step-card">
+            <div class="num">2</div>
+            <h4>A IA monta o laudo</h4>
+            <p>O texto tecnico e os dados sao gerados e organizados no padrao do relatorio.</p>
+          </div>
+          <div class="step-card">
+            <div class="num">3</div>
+            <h4>Baixe a planilha</h4>
+            <p>O Excel sai pronto, com as fotos numeradas e os campos preenchidos.</p>
+          </div>
+        </div>
+
+        <div class="section-label">Por que usar</div>
+        <div class="benefits">
+          <div class="benefit">
+            <span class="benefit-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/></svg></span>
+            <div><h4>Horas viram minutos</h4><p>Do texto bruto da visita ao laudo final em poucos minutos, sem digitar a planilha na mao.</p></div>
+          </div>
+          <div class="benefit">
+            <span class="benefit-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M6 3h9l3 3v15H6V3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M14 3v4h4M9 13h6M9 17h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
+            <div><h4>No padrao do laudo</h4><p>A planilha sai no modelo aprovado, com as fotos da vistoria numeradas no lugar certo.</p></div>
+          </div>
+          <div class="benefit">
+            <span class="benefit-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3 4 6v6c0 5 3.5 7.5 8 9 4.5-1.5 8-4 8-9V6l-8-3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <div><h4>IA que nao inventa</h4><p>So preenche o que esta nas anotacoes. O que nao foi informado fica em branco &mdash; nada de dado inventado.</p></div>
+          </div>
+          <div class="benefit">
+            <span class="benefit-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16v13H4V7Z" stroke="currentColor" stroke-width="2"/><path d="m8 7 2-3h4l2 3M8 14l3 3 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <div><h4>Texto tecnico pronto</h4><p>Transforma anotacoes pobres em redacao tecnica de qualidade, no tom de analise de credito.</p></div>
+          </div>
+        </div>
+
+        <div class="cta-band">
+          <div>
+            <strong>Pronto para testar?</strong>
+            <span>Abra a ferramenta, clique em &ldquo;Ver exemplo&rdquo; e gere um laudo em segundos.</span>
+          </div>
+          <a class="btn btn-primary" href="/relatorio-credito">
+            Abrir ferramenta
+            <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
         </div>
       </div>
     </main>
@@ -803,8 +875,24 @@ def render_credit_report_page() -> str:
     }
     textarea:focus, input[type="text"]:focus { border-color: var(--forest-600); box-shadow: var(--ring); }
     textarea { min-height: 250px; resize: vertical; padding: 16px; font: 15px/1.6 "Segoe UI", Arial, sans-serif; }
-    #rawData::placeholder { color: #8a968a; }
+    #rawData::placeholder { color: #97a397; line-height: 1.7; }
     input[type="text"] { min-height: 40px; padding: 10px 12px; font-size: 14px; }
+    .link-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line-strong);
+      background: var(--forest-50);
+      color: var(--forest-700);
+      font-size: 12.5px;
+      font-weight: 850;
+      cursor: pointer;
+      transition: background .15s ease, border-color .15s ease, transform .15s ease;
+    }
+    .link-btn:hover { background: var(--forest-100); border-color: var(--forest-600); transform: translateY(-1px); }
+    .link-btn svg { width: 15px; height: 15px; }
 
     .upload-card {
       border: 1px solid var(--line);
@@ -989,9 +1077,12 @@ def render_credit_report_page() -> str:
               <div class="notes-card">
                 <div class="notes-head">
                   <label for="rawData">Anotacoes da vistoria</label>
-                  <span class="notes-badge">Texto da visita</span>
+                  <button type="button" id="sampleBtn" class="link-btn">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M12 3l1.6 4.2L18 9l-4.4 1.8L12 15l-1.6-4.2L6 9l4.4-1.8L12 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                    Ver exemplo
+                  </button>
                 </div>
-                <textarea id="rawData" placeholder="Cole aqui os dados brutos da visita, do jeito que recebeu."></textarea>
+                <textarea id="rawData" placeholder="Cole aqui as anotacoes da vistoria, do jeito que voce recebeu do campo &mdash; nao precisa organizar.&#10;&#10;Se tiver, ajuda incluir:&#10;&bull; Produtor, propriedade e municipio&#10;&bull; Area (alqueires ou hectares)&#10;&bull; Rebanho ou lavouras&#10;&bull; Benfeitorias (curral, cochos, bebedouros, galpao...)&#10;&bull; Maquinarios"></textarea>
               </div>
 
               <div class="upload-card">
@@ -1100,6 +1191,40 @@ def render_credit_report_page() -> str:
   function setStatus(text) {
     if (statusText) statusText.textContent = text;
     if (statusTile) statusTile.textContent = text;
+  }
+
+  const SAMPLE_NOTES = [
+    'Jose Carlos Ferreira',
+    'CPF 123.456.789-00',
+    'Acesso: saindo de Rio Verde-GO pela GO-174, ande 12 km e vire a direita na estrada de chao, mais 3 km ate a porteira',
+    '',
+    'Fazenda Boa Esperanca - Rio Verde-GO',
+    '80 hectares',
+    '55 hectares de pastagem',
+    '20 hectares de soja',
+    'Pecuaria de corte e lavoura de soja',
+    '320 cabecas de gado nelore - cria e recria',
+    'Pastagem de brachiaria',
+    '2 currais',
+    'cochos cobertos nos piquetes',
+    'bebedouros nos piquetes',
+    '1 represa',
+    'galpao de armazenagem de maquinarios',
+    '2 funcionarios fixos',
+    '',
+    'Trator Massey Ferguson 4292',
+    'Colheitadeira John Deere 1550',
+    'Plantadeira Tatu 12 linhas'
+  ].join('\\n');
+
+  const sampleBtn = document.getElementById('sampleBtn');
+  if (sampleBtn) {
+    sampleBtn.addEventListener('click', () => {
+      rawData.value = SAMPLE_NOTES;
+      rawData.focus();
+      rawData.scrollTop = 0;
+      setStatus('Exemplo carregado');
+    });
   }
 
   document.getElementById('clearBtn').addEventListener('click', () => {

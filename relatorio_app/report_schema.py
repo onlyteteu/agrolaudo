@@ -14,6 +14,7 @@ partir de dados confiaveis, eliminando a maior fonte de erro do pipeline antigo.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .report_engine import normalize_data, parse_decimal_pt
@@ -107,6 +108,29 @@ REPORT_JSON_SCHEMA: dict[str, Any] = {
         },
     },
     "required": ["cliente", "imoveis"],
+    "propertyOrdering": [
+        "cliente",
+        "cpf_cnpj",
+        "data_visita",
+        "cidade_uf",
+        "localizacao_1",
+        "localizacao_2",
+        "finalidade_vistoria",
+        "comentario_localizacao",
+        "imoveis",
+        "atividade_principal",
+        "principais_culturas",
+        "benfeitorias_descricao",
+        "benfeitorias_conservacao",
+        "benfeitorias_observacoes",
+        "equipamentos",
+        "investimentos_comentarios",
+        "insumos_comentarios",
+        "outros_comentarios",
+        "conclusao",
+        "rebanho",
+        "insumos",
+    ],
 }
 
 
@@ -145,6 +169,23 @@ def build_extraction_prompt(raw_text: str, report_text: str = "") -> str:
         "indicam pastagens. Se nada no relatorio indicar o item, NAO o marque (deixe de fora). "
         "Nunca marque por suposicao.",
     ]
+    parts.extend(
+        [
+            "",
+            "EXEMPLOS DE EXTRACAO (siga exatamente este padrao):",
+            "Anotacao: 'Joao Silva, Fazenda Boa Vista - Goiania-GO, 10 alqueires, gado nelore cria, 6 piquetes, bebedouro, pasto brachiaria'",
+            'JSON: {"cliente":"Joao Silva","imoveis":[{"nome":"Fazenda Boa Vista - Goiania-GO",'
+            '"area_total_ha":48.4,"area_pastagens_ha":48.4,"area_cultivo_ha":0,'
+            '"atividade_principal":"Pecuaria de corte (Cria)","principais_culturas":"Brachiaria"}],'
+            '"insumos":{"agua":true,"pastagens":true}}',
+            "Anotacao: 'Maria Souza, Sitio Boa Esperanca - Rio Verde-GO, 45 hectares, 35 ha de pastagem, "
+            "10 ha de soja, pecuaria leiteira, represa, 1 caminhao'",
+            'JSON: {"cliente":"Maria Souza","imoveis":[{"nome":"Sitio Boa Esperanca - Rio Verde-GO",'
+            '"area_total_ha":45,"area_pastagens_ha":35,"area_cultivo_ha":10,'
+            '"atividade_principal":"Pecuaria leiteira","principais_culturas":"Soja"}],'
+            '"insumos":{"agua":true,"pastagens":true,"estrutura_transporte":true}}',
+        ]
+    )
     if report_text.strip():
         parts.extend(["", "TEXTO TECNICO JA REDIGIDO (use como apoio, mas a fonte da verdade sao as anotacoes brutas):", report_text.strip()])
     parts.extend(["", "ANOTACOES BRUTAS DA VISITA:", raw_text.strip(), "", "Responda APENAS com o JSON no schema definido."])
@@ -171,6 +212,8 @@ def coerce_structured_data(ai_data: Any) -> dict[str, Any]:
             cleaned[key] = _coerce_equipment(value)
         elif key == "insumos":
             cleaned[key] = _coerce_insumos(value)
+        elif key == "cpf_cnpj":
+            cleaned[key] = _clean_cpf_cnpj(value)
         elif key in _AREA_NUMBER_FIELDS:
             cleaned[key] = parse_decimal_pt(value)
         else:
@@ -201,6 +244,13 @@ def _coerce_properties(value: Any) -> list[dict[str, Any]]:
         if item.get("nome"):
             items.append(item)
     return items
+
+
+def _clean_cpf_cnpj(value: Any) -> str:
+    """Remove rotulos que a IA as vezes inclui no valor (ex.: 'CPF 123...')."""
+    text = str(value or "").strip()
+    text = re.sub(r"^(?:cpf\s*/\s*cnpj|cnpj\s*/\s*cpf|cpf|cnpj)\s*[:.\-]?\s*", "", text, flags=re.IGNORECASE)
+    return text.strip()
 
 
 def _coerce_insumos(value: Any) -> dict[str, bool]:

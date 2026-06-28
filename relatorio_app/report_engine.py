@@ -1480,6 +1480,35 @@ def infer_insumos(data: dict[str, Any]) -> dict[str, bool]:
             "mombaca",
             "capim",
         ),
+        "mao_de_obra": (
+            "funcionario",
+            "funcionarios",
+            "caseiro",
+            "trabalhador",
+            "trabalhadores",
+            "alojamento",
+            "colaborador",
+            "vaqueiro",
+            "peao",
+            "peoes",
+        ),
+        "estrutura_armazenagem": (
+            "galpao",
+            "silo",
+            "armazem",
+            "barracao",
+            "trincheira",
+            "deposito",
+            "paiol",
+            "tulha",
+        ),
+        "estrutura_transporte": (
+            "caminhao",
+            "caminhoes",
+            "caminhonete",
+            "carreta",
+            "frota",
+        ),
     }
     marks: dict[str, bool] = {}
     for key, terms in evidence.items():

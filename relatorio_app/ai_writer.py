@@ -276,7 +276,7 @@ def request_gemini_json(prompt: str, schema: dict, *, api_key: str, model: str) 
             }
         ],
         "generationConfig": {
-            "temperature": 0.1,
+            "temperature": 0.0,
             "topP": 0.9,
             "maxOutputTokens": 8192,
             "responseMimeType": "application/json",
