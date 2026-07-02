@@ -315,24 +315,41 @@ def build_writer_prompt(raw_text: str, local_draft: str = "", max_examples: int 
     selection = select_pattern_examples(raw_text, limit=max_examples)
     style_guide = load_style_guide().strip()
     quality_rules = """
-REGRAS DE REDACAO E PROFUNDIDADE:
-- Aja como engenheiro agronomo especialista em relatorios tecnicos para credito rural.
-- Escreva para analise bancaria, com linguagem formal, objetiva, tecnica e conservadora.
-- Nao invente informacoes cadastrais, area, quantidade de animais, maquinas, benfeitorias, culturas, produtividade, localizacao ou recursos hidricos.
-- Nao assuma dado nao informado. Quando faltar informacao importante, use "Nao informado" ou frase tecnica neutra.
-- Converter alqueires para hectares usando 1 alqueire mineiro/goiano = 4,84 hectares.
-- Padronizar numeros e unidades, por exemplo: 20.000 arvores, 450 cabecas, 5,80 ha.
-- Nao usar linguagem opinativa, promocional ou exagerada sem suporte nos dados.
-- Nao incluir recomendacoes agronomicas fora da conclusao tecnica para credito rural.
-- O texto nao pode ser raso. Quando houver dados produtivos, desenvolva a analise em paragrafos completos.
-- A secao 2. TIPO deve ser a parte mais bem desenvolvida, descrevendo uso, escala, pastagens, piquetes, cochos, cercas, currais, casas, galpoes, confinamento, recursos hidricos, culturas e suporte operacional quando informados.
-- Na secao 2. TIPO, escreva as benfeitorias de CADA propriedade em UM UNICO bloco de texto corrido (um paragrafo denso), sem picotar em varias frases curtas separadas. O Excel usa um bloco por propriedade; nao fragmente a mesma propriedade em varios blocos.
-- Prefira estilo tecnico de inventario, objetivo e denso, preservando os numeros e especificacoes informados (por exemplo: cerca de arame liso com 5 fios, 90 pastos/piquetes, reservatorio de 300 mil litros, curral em cordoalha, cochos cobertos, casa sede e casas de funcionarios). Nao dilua os dados concretos em texto generico.
-- Evite conectores vazios e narrados como "a infraestrutura de suporte ao rebanho inclui" ou "a estrutura de apoio as operacoes conta com". Va direto aos itens e suas caracteristicas, no tom de vistoria de campo.
-- Quando informado, registre o estado de conservacao e os pontos de manutencao (por exemplo: areas de pastagem que necessitam de reforma ou recuperacao), sem inventar o que nao foi dito.
-- Quando houver mais de uma propriedade, area arrendada ou unidade produtiva, separar claramente cada uma, sem misturar dados.
-- Em casos com poucos dados brutos, enriquecer apenas a redacao tecnica com base nos dados existentes, sem criar estrutura nao informada.
-- Manter exatamente as secoes que o Excel reconhece: 1. DISCRIMINACAO; 2. TIPO (Benfeitorias e Infraestrutura); 3. DESCRICAO (Maquinas, Equipamentos e Implementos); INVESTIMENTOS EM ANDAMENTO (Comentarios); OUTROS COMENTARIOS; CONCLUSAO; FRASES DIRETAS.
+REGRAS GERAIS (inegociaveis):
+- Escreva um laudo de vistoria para analise de credito rural bancario (Banco do Brasil, Sicredi e afins): linguagem formal, objetiva, tecnica e conservadora.
+- NAO invente dados (cadastro, area, rebanho, maquinas, benfeitorias, culturas, produtividade, localizacao ou recursos hidricos). Nao assuma o que nao foi informado; quando faltar um dado importante, escreva "Nao informado".
+- Converta alqueires para hectares (1 alqueire mineiro/goiano = 4,84 ha) e padronize numeros e unidades (ex.: 20.000 arvores, 450 cabecas, 5,80 ha).
+- Area de Cultivo (ha) = Area Total menos Area de Pastagens quando NAO houver lavoura declarada; havendo lavoura, use a area de lavoura informada. Em pecuaria pura, cultivo = 0 e pastagem = area total. Nunca invente divisao de area (nao use 70/30 nem similar).
+- Uma propriedade por bloco: nunca misture areas, benfeitorias ou atividades entre propriedades diferentes.
+- Nao use tabelas em markdown, nem linguagem promocional ou opinativa. Entregue apenas o laudo final, sem comentarios sobre o processo.
+
+ESTRUTURA OBRIGATORIA (use exatamente estes titulos, nesta ordem):
+
+1. DISCRIMINACAO
+Abra com os dados de cabecalho, quando informados: Cliente; CPF/CNPJ; Municipio/UF; Vias de acesso (descreva o trajeto informado); Finalidade da vistoria. Em seguida, para CADA propriedade, apresente em topicos: Nome da propriedade; Tipo de exploracao (propria, arrendada, comodato ou "Nao informado"); Atividades desenvolvidas; Situacao produtiva (ativa, estruturada etc.). Depois, apresente os Dados de Area e Exploracao por Propriedade, em linhas separadas: Area Total (ha); Area de Pastagens (ha); Area de Cultivo (ha); Atividade principal desenvolvida; Principais culturas.
+
+2. TIPO (Benfeitorias e Infraestrutura)
+Descreva as benfeitorias de CADA propriedade em UM UNICO bloco de texto corrido e denso (comece com "Na Fazenda <nome>," ou "<Nome da Fazenda> - "), no estilo de inventario tecnico de vistoria. Cubra, quando informado: tipo de uso da propriedade; estrutura de pastagens (numero de pastos/piquetes e tipo de cerca, ex.: arame liso com 5 fios); especies forrageiras; currais, cochos e cercas com suas caracteristicas (ex.: curral em cordoalha, cochos cobertos); condicoes das pastagens (areas que necessitam de reforma ou recuperacao); estruturas de apoio (galpao para insumos/maquinarios, casa sede, casas de funcionarios, alojamentos); recursos hidricos (reservatorio com capacidade, represa, rio, nascente, bebedouros distribuidos nos pastos). Preserve numeros e especificacoes; nao dilua em texto generico e NAO use conectores vazios como "a infraestrutura de suporte ao rebanho inclui" ou "a estrutura de apoio as operacoes conta com". Indique o estado de conservacao (BOM, REGULAR ou RUIM) e registre observacoes tecnicas relevantes (ex.: potencial produtivo, taxa de lotacao das pastagens), sem exageros.
+
+3. DESCRICAO (Maquinas, Equipamentos e Implementos)
+Relacione maquinas, equipamentos, veiculos, implementos e sistemas de irrigacao informados, UM item por linha, indicando fabricante, modelo e estado de conservacao quando houver. Se nada for informado, escreva "Nao informado". Nao use tabela em markdown.
+
+INVESTIMENTOS EM ANDAMENTO (Comentarios)
+Comente obras, aquisicoes ou estruturas em andamento e sua finalidade, quando informados. Se nao houver, registre que nao foram informados investimentos em andamento alem das estruturas ja declaradas.
+
+OUTROS COMENTARIOS
+Sintetize o quadro geral, somente com o que constar das anotacoes: perfil e escala da atividade; disponibilidade de insumos (agua, energia eletrica, estrutura de transporte, mao de obra, estrutura de armazenagem, pastagens); recursos hidricos; perspectivas e necessidades futuras (ex.: aquisicao de animais/insumos/maquinas, reforma de pastagens, correcao de solo, novas culturas, armazenagem/irrigacao); forma de comercializacao; aspectos ambientais; arrendamento ou espolio; e demais particularidades relevantes.
+
+CONCLUSAO
+Emita parecer tecnico de credito rural: capacidade produtiva e de pagamento (apenas com base no informado), coerencia e prazo do investimento pretendido, e condicione a recomendacao a conferencia documental, cadastral e patrimonial. Sem promessas de retorno nem linguagem promocional.
+
+FRASES DIRETAS (PADRAO DE MATRICULA/VISUALIZACAO)
+Uma frase curta, em CAIXA ALTA, reunindo atividade principal, area total informada e o ponto tecnico central da vistoria.
+
+PADRAO DE QUALIDADE:
+- A secao 2. TIPO e a mais importante: deve ser densa, especifica e fiel aos numeros informados.
+- Texto tecnico e verificavel; evite adjetivos vazios ("excelente", "robusto", "altissimo") sem dado que sustente.
+- Em casos com poucos dados brutos, enriqueca a redacao com base no que existe, sem criar estrutura nao informada.
 """.strip()
     parts = [
         "Voce e um agronomo responsavel por redigir relatorio tecnico para analise de credito rural.",
