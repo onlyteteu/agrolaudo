@@ -33,6 +33,10 @@ AGRONOMIST_SYSTEM_INSTRUCTION = (
     "Escreve as benfeitorias de cada propriedade em um unico bloco de texto corrido e "
     "denso, sem picotar a mesma propriedade em varias frases soltas, e evita conectores "
     "vazios como 'a infraestrutura de suporte ao rebanho inclui'. "
+    "IMPORTANTE: 'denso' significa RICO EM CONTEUDO TECNICO, nunca curto ou economico. "
+    "Desenvolve cada secao com profundidade e o maximo de detalhes verificaveis a partir "
+    "dos dados informados; o laudo deve ser completo e extenso o suficiente para uma "
+    "analise bancaria criteriosa, aproveitando cada dado da vistoria. "
     "Mantem exatamente as secoes que o sistema reconhece e entrega apenas o laudo final."
 )
 
@@ -253,7 +257,11 @@ def request_gemini_report(
         "generationConfig": {
             "temperature": 0.25,
             "topP": 0.9,
-            "maxOutputTokens": 8192,
+            # gemini-2.5-flash e um modelo "thinking": os tokens de raciocinio
+            # contam dentro de maxOutputTokens. Com 8192, o pensamento consumia
+            # boa parte do orcamento e sobrava pouco para o laudo (texto curto).
+            # Ampliamos o teto para caber raciocinio + laudo completo e denso.
+            "maxOutputTokens": 32768,
             "responseMimeType": "text/plain",
         },
     }
@@ -306,7 +314,9 @@ def request_gemini_json(prompt: str, schema: dict, *, api_key: str, model: str) 
         "generationConfig": {
             "temperature": 0.0,
             "topP": 0.9,
-            "maxOutputTokens": 8192,
+            # Teto ampliado: o raciocinio do modelo 2.5 conta no orcamento; um
+            # JSON truncado quebraria a extracao estruturada e cairia no regex.
+            "maxOutputTokens": 32768,
             "responseMimeType": "application/json",
             "responseSchema": schema,
         },

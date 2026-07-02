@@ -347,8 +347,9 @@ FRASES DIRETAS (PADRAO DE MATRICULA/VISUALIZACAO)
 Uma frase curta, em CAIXA ALTA, reunindo atividade principal, area total informada e o ponto tecnico central da vistoria.
 
 PADRAO DE QUALIDADE:
-- A secao 2. TIPO e a mais importante: deve ser densa, especifica e fiel aos numeros informados.
-- Texto tecnico e verificavel; evite adjetivos vazios ("excelente", "robusto", "altissimo") sem dado que sustente.
+- IMPORTANTE: "denso" significa RICO EM CONTEUDO TECNICO, nunca curto. Desenvolva CADA secao com profundidade, aproveitando todos os dados informados. O laudo deve ser completo e extenso o suficiente para analise bancaria (nao entregue respostas curtas ou econômicas).
+- A secao 2. TIPO e a mais importante: deve ser a mais desenvolvida, densa, especifica e fiel aos numeros informados.
+- Texto tecnico e verificavel; evite adjetivos vazios ("excelente", "robusto", "altissimo") sem dado que sustente, mas nao economize em detalhes tecnicos reais.
 - Em casos com poucos dados brutos, enriqueca a redacao com base no que existe, sem criar estrutura nao informada.
 """.strip()
     parts = [
