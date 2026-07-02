@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+
 # Nome da marca exibido em toda a interface.
 # Quando o nome final for decidido, basta trocar aqui.
 BRAND = "AgroDesk"
@@ -13,6 +15,25 @@ _LEAF_SVG = (
     'fill="currentColor" opacity=".68"/>'
     '</svg>'
 )
+
+# Favicon da marca: folha lima sobre fundo verde-escuro arredondado.
+# Embutido como data-URI (base64) para nao depender de arquivo servido.
+_FAVICON_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
+    '<rect width="32" height="32" rx="7" fill="#0b271a"/>'
+    '<g transform="translate(4 4)">'
+    '<path d="M12 21V11" stroke="#c2f24d" stroke-width="2.2" stroke-linecap="round"/>'
+    '<path d="M12 12.6C12 8 8.4 4.6 3.6 4.6 3.6 9.2 7.2 12.6 12 12.6Z" fill="#c2f24d"/>'
+    '<path d="M13.1 10.4C13.1 6.8 15.9 4 19.6 4 19.6 7.6 16.8 10.4 13.1 10.4Z" fill="#a7df2f"/>'
+    '</g>'
+    '</svg>'
+)
+
+
+def _favicon_link() -> str:
+    """Tag <link> do favicon com o SVG da marca em base64."""
+    encoded = base64.b64encode(_FAVICON_SVG.encode("utf-8")).decode("ascii")
+    return f'<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,{encoded}">'
 
 
 def _base_css() -> str:
@@ -450,6 +471,7 @@ def render_home() -> str:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{BRAND}</title>
+  {_favicon_link()}
   <style>
     {_base_css()}
     .tool-card {{
@@ -818,6 +840,7 @@ def render_credit_report_page() -> str:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>__BRAND__ | Relatório de crédito</title>
+  __FAVICON__
   <style>
     __BASE_CSS__
     .hero.compact { padding: 22px 28px 20px; }
@@ -1541,4 +1564,4 @@ def render_credit_report_page() -> str:
   });
 </script>
 </body>
-</html>""".replace("__BASE_CSS__", _base_css()).replace("__RAIL__", _rail("tool")).replace("__BRAND__", BRAND)
+</html>""".replace("__BASE_CSS__", _base_css()).replace("__RAIL__", _rail("tool")).replace("__FAVICON__", _favicon_link()).replace("__BRAND__", BRAND)
