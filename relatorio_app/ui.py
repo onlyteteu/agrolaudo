@@ -975,11 +975,13 @@ def render_credit_report_page() -> str:
       border-radius: var(--radius-sm);
       background: var(--surface-soft);
     }
-    .step-num {
+    .step .step-num {
       width: 28px; height: 28px;
       flex: 0 0 auto;
+      margin-top: 0;
       border-radius: 9px;
       display: grid; place-items: center;
+      line-height: 1;
       font-size: 13px; font-weight: 900;
       color: var(--forest-950);
       background: linear-gradient(135deg, var(--lime), var(--lime-strong));
