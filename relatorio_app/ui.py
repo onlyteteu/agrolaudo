@@ -954,7 +954,24 @@ def render_credit_report_page() -> str:
       box-shadow: 0 10px 22px rgba(141,196,47,.34);
     }
     .upload-icon svg { width: 22px; height: 22px; }
+    .file-count-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .file-count { color: var(--muted); font-size: 13px; }
+    .clear-photos {
+      flex: 0 0 auto;
+      border: 0;
+      background: none;
+      padding: 2px 2px;
+      color: var(--muted);
+      font-size: 12.5px;
+      font-weight: 750;
+      line-height: 1.2;
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      transition: color .15s ease;
+    }
+    .clear-photos:hover { color: var(--forest-700); }
+    .clear-photos[hidden] { display: none; }
     .file-list { display: grid; gap: 6px; max-height: 120px; overflow: auto; }
     .file-pill {
       min-height: 30px;
@@ -1050,6 +1067,21 @@ def render_credit_report_page() -> str:
     }
     .overlay-card h2 { margin: 0; color: var(--forest-950); font-size: 20px; }
     .overlay-card p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+    .overlay-cancel {
+      margin-top: 18px;
+      min-height: 38px;
+      padding: 0 16px;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: background .15s ease, color .15s ease, border-color .15s ease;
+    }
+    .overlay-cancel:hover { background: #fdeeee; border-color: #e0b3b3; color: #b23b3b; }
+    .overlay-cancel[hidden] { display: none; }
     .progress-track { height: 8px; border-radius: 999px; margin-top: 18px; overflow: hidden; background: #e7eddf; }
     .progress-bar {
       width: 42%; height: 100%;
@@ -1121,7 +1153,10 @@ def render_credit_report_page() -> str:
                     <small>Escolha várias imagens de uma vez ou arraste aqui</small>
                   </span>
                 </label>
-                <span class="file-count" id="fileCount">Nenhuma foto selecionada</span>
+                <div class="file-count-row">
+                  <span class="file-count" id="fileCount">Nenhuma foto selecionada</span>
+                  <button type="button" class="clear-photos" id="clearPhotosBtn" hidden>Limpar fotos</button>
+                </div>
                 <div class="file-list" id="fileList"></div>
               </div>
 
@@ -1184,6 +1219,7 @@ def render_credit_report_page() -> str:
       <h2 id="overlayTitle">Gerando planilha</h2>
       <p id="overlayText">Preparando o arquivo para download.</p>
       <div class="progress-track"><div class="progress-bar"></div></div>
+      <button type="button" class="overlay-cancel" id="cancelBtn">Cancelar</button>
     </div>
   </div>
 
@@ -1211,7 +1247,10 @@ def render_credit_report_page() -> str:
   const overlay = document.getElementById('downloadOverlay');
   const overlayTitle = document.getElementById('overlayTitle');
   const overlayText = document.getElementById('overlayText');
+  const clearPhotosBtn = document.getElementById('clearPhotosBtn');
+  const cancelBtn = document.getElementById('cancelBtn');
   let lastExtraction = null;
+  let abortController = null;
 
   function setStatus(text) {
     if (statusText) statusText.textContent = text;
@@ -1271,8 +1310,16 @@ def render_credit_report_page() -> str:
     if (fileInput) fileInput.value = '';
     if (fileCount) fileCount.textContent = 'Nenhuma foto selecionada';
     if (fileList) fileList.innerHTML = '';
+    if (clearPhotosBtn) clearPhotosBtn.hidden = true;
     rawData.focus();
   });
+
+  if (clearPhotosBtn) {
+    clearPhotosBtn.addEventListener('click', () => {
+      fileInput.value = '';
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
 
   function setBusy(button, busy, label) {
     if (!button) return;
@@ -1290,11 +1337,21 @@ def render_credit_report_page() -> str:
   function showOverlay(title, text) {
     overlayTitle.textContent = title;
     overlayText.textContent = text;
+    if (cancelBtn) cancelBtn.hidden = false;
     overlay.classList.add('show');
   }
 
   function hideOverlay() {
     overlay.classList.remove('show');
+  }
+
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => {
+      if (abortController) abortController.abort();
+      hideOverlay();
+      setAllBusy(false);
+      setStatus('Geração cancelada');
+    });
   }
 
   extractBtn.addEventListener('click', refreshFieldsFromTechnicalText);
@@ -1317,7 +1374,8 @@ def render_credit_report_page() -> str:
     const response = await fetch('/write-technical-report', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ raw_text: rawText })
+      body: JSON.stringify({ raw_text: rawText }),
+      signal: abortController ? abortController.signal : undefined
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || 'Não consegui gerar o relatório.');
@@ -1343,7 +1401,8 @@ def render_credit_report_page() -> str:
       const response = await fetch('/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dados })
+        body: JSON.stringify({ dados }),
+        signal: abortController ? abortController.signal : undefined
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Não consegui atualizar a extração.');
@@ -1351,6 +1410,7 @@ def render_credit_report_page() -> str:
       setStatus('Extração pronta');
       return true;
     } catch (error) {
+      if (error.name === 'AbortError') return false;
       showError(error.message);
       return false;
     } finally {
@@ -1474,7 +1534,11 @@ def render_credit_report_page() -> str:
 
   async function downloadWorkbook() {
     const formData = new FormData(form);
-    const response = await fetch('/generate', { method: 'POST', body: formData });
+    const response = await fetch('/generate', {
+      method: 'POST',
+      body: formData,
+      signal: abortController ? abortController.signal : undefined
+    });
     if (!response.ok) {
       const text = await response.text();
       throw new Error(text.replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim() || 'Não consegui gerar a planilha.');
@@ -1498,6 +1562,7 @@ def render_credit_report_page() -> str:
       : total === 1
         ? '1 foto selecionada'
         : `${total} fotos selecionadas`;
+    if (clearPhotosBtn) clearPhotosBtn.hidden = total === 0;
     fileList.innerHTML = files.slice(0, 6).map((file, index) => `
       <div class="file-pill">
         <span>Foto ${String(index + 1).padStart(2, '0')} - ${escapeHtml(file.name)}</span>
@@ -1537,6 +1602,7 @@ def render_credit_report_page() -> str:
       return;
     }
 
+    abortController = new AbortController();
     setAllBusy(true, 'Gerando');
     try {
       if (!technicalText.value.trim()) {
@@ -1546,19 +1612,22 @@ def render_credit_report_page() -> str:
       if (!reviewData.value) {
         showOverlay('Extraindo campos', 'Separando cliente, áreas e propriedades.');
         const ok = await refreshFieldsFromTechnicalText();
-        if (!ok) return;
+        if (!ok) { hideOverlay(); return; }
       }
       syncReviewData();
       showOverlay('Gerando planilha', 'Preparando o arquivo para download.');
       await downloadWorkbook();
+      if (cancelBtn) cancelBtn.hidden = true;
       overlayTitle.textContent = 'Download iniciado';
       overlayText.textContent = 'A planilha foi enviada para o navegador.';
       setStatus('Planilha baixada');
       setTimeout(hideOverlay, 1200);
     } catch (error) {
+      if (error.name === 'AbortError') return;
       hideOverlay();
       showError(error.message);
     } finally {
+      abortController = null;
       setAllBusy(false);
     }
   });
