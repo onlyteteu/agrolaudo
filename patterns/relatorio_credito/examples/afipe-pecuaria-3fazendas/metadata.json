@@ -1,0 +1,27 @@
+{
+  "id": "afipe-pecuaria-3fazendas",
+  "title": "AFIPE - Pecuaria de corte em tres propriedades (multi-propriedades, grande escala)",
+  "approved": true,
+  "tags": [
+    "multi_propriedades",
+    "pecuaria_corte",
+    "nelore",
+    "pastagens",
+    "brachiaria",
+    "mombaca",
+    "piquetes",
+    "currais",
+    "cochos_cobertos",
+    "bebedouros",
+    "galpao",
+    "casa_sede",
+    "casas_funcionarios",
+    "recursos_hidricos",
+    "reforma_pastagem",
+    "grande_escala",
+    "maquinarios",
+    "comodato",
+    "projetos_futuros"
+  ],
+  "notes": "Reconstruido a partir de laudo BB real aprovado (Visita Previa - AFIPE). O expected.txt e transcricao fiel do laudo final (com correcao de erros obvios de digitacao). O raw.txt sao anotacoes de campo RECONSTRUIDAS a partir dos dados do laudo final; nao sao as anotacoes originais do agronomo, mas nao contem fatos inventados."
+}
