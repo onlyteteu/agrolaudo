@@ -421,21 +421,21 @@ def _rail(active: str) -> str:
       </div>
       <div>
         <div class="nav-label">Menu</div>
-        <nav class="nav" aria-label="Navegacao principal">
+        <nav class="nav" aria-label="Navegação principal">
           <a class="{home_cls}" href="/">
             <svg viewBox="0 0 24 24" fill="none"><path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1v-8Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
-            <span>Inicio</span>
+            <span>Início</span>
           </a>
           <a class="{tool_cls}" href="/relatorio-credito">
             <svg viewBox="0 0 24 24" fill="none"><path d="M6 3h9l3 3v15H6V3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M14 3v4h4M9 13h6M9 17h6M9 9h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            <span>Relatorio de credito</span>
+            <span>Relatório de crédito</span>
           </a>
         </nav>
       </div>
       <div class="rail-foot">
         <div class="rail-card">
-          <strong>Relatorio em minutos</strong>
-          <span>Cole as anotacoes da vistoria e baixe a planilha pronta no padrao do laudo.</span>
+          <strong>Relatório em minutos</strong>
+          <span>Cole as anotações da vistoria e baixe a planilha pronta no padrão do laudo.</span>
         </div>
         <span class="rail-tag">Beta</span>
       </div>
@@ -694,34 +694,34 @@ def render_home() -> str:
         <section class="hero">
           <div class="hero-top">
             <div>
-              <span class="eyebrow">Relatorio de credito rural</span>
+              <span class="eyebrow">Relatório de crédito rural</span>
               <h1>Do campo ao documento,<br><span class="accent">sem retrabalho.</span></h1>
-              <p class="lead">Com <strong style="color:#dff5b6;font-weight:850">IA integrada</strong>, transforme as anotacoes da vistoria em uma planilha de credito rural completa &mdash; com texto tecnico, fotos numeradas e tudo no padrao do laudo.</p>
+              <p class="lead">Com <strong style="color:#dff5b6;font-weight:850">IA integrada</strong>, transforme as anotações da vistoria em uma planilha de crédito rural completa &mdash; com texto técnico, fotos numeradas e tudo no padrão do laudo.</p>
             </div>
           </div>
           <div class="hero-actions" style="margin-top:24px">
             <a class="btn btn-primary" href="/relatorio-credito">
-              Abrir relatorio de credito
+              Abrir relatório de crédito
               <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </a>
             <span class="hero-chip"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3l1.8 4.7L18.5 9.5 13.8 11.3 12 16l-1.8-4.7L5.5 9.5 10.2 7.7 12 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>IA integrada</span>
-            <span class="hero-chip"><svg viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Texto tecnico automatico</span>
+            <span class="hero-chip"><svg viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Texto técnico automático</span>
           </div>
         </section>
 
-        <section class="tool-card" aria-label="Relatorio de credito rural">
+        <section class="tool-card" aria-label="Relatório de crédito rural">
             <div class="tool-inner">
               <article class="tool-main">
                 <div class="tool-icon">
                   <svg viewBox="0 0 24 24" fill="none"><path d="M6 3h9l3 3v15H6V3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M14 3v4h4M9 13h6M9 17h6M9 9h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 </div>
                 <div>
-                  <h2>Relatorio de credito rural</h2>
-                  <p class="tool-text">Cole as anotacoes da visita, gere o texto tecnico, revise o essencial e baixe a planilha final ja com as fotos no padrao do laudo.</p>
+                  <h2>Relatório de crédito rural</h2>
+                  <p class="tool-text">Cole as anotações da visita, gere o texto técnico, revise o essencial e baixe a planilha final já com as fotos no padrão do laudo.</p>
                 </div>
                 <div class="chips">
                   <span class="chip">IA integrada</span>
-                  <span class="chip">Texto tecnico</span>
+                  <span class="chip">Texto técnico</span>
                   <span class="chip">Fotos</span>
                   <span class="chip">Excel</span>
                 </div>
@@ -733,7 +733,7 @@ def render_home() -> str:
                 </div>
               </article>
               <aside class="visual" aria-hidden="true">
-                <span class="visual-caption"><span class="dot"></span>Relatorio pronto</span>
+                <span class="visual-caption"><span class="dot"></span>Relatório pronto</span>
                 <span class="visual-badge"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3l1.8 4.7L18.5 9.5 13.8 11.3 12 16l-1.8-4.7L5.5 9.5 10.2 7.7 12 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></span>
                 <div class="sheet">
                   <div class="sheet-top">
@@ -759,13 +759,13 @@ def render_home() -> str:
         <div class="steps-row">
           <div class="step-card">
             <div class="num">1</div>
-            <h4>Cole as anotacoes</h4>
+            <h4>Cole as anotações</h4>
             <p>Jogue o texto bruto da vistoria e anexe as fotos, do jeito que recebeu do campo.</p>
           </div>
           <div class="step-card">
             <div class="num">2</div>
             <h4>A IA monta o laudo</h4>
-            <p>O texto tecnico e os dados sao gerados e organizados no padrao do relatorio.</p>
+            <p>O texto técnico e os dados são gerados e organizados no padrão do relatório.</p>
           </div>
           <div class="step-card">
             <div class="num">3</div>
@@ -778,19 +778,19 @@ def render_home() -> str:
         <div class="benefits">
           <div class="benefit">
             <span class="benefit-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/></svg></span>
-            <div><h4>Horas viram minutos</h4><p>Do texto bruto da visita ao laudo final em poucos minutos, sem digitar a planilha na mao.</p></div>
+            <div><h4>Horas viram minutos</h4><p>Do texto bruto da visita ao laudo final em poucos minutos, sem digitar a planilha na mão.</p></div>
           </div>
           <div class="benefit">
             <span class="benefit-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M6 3h9l3 3v15H6V3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M14 3v4h4M9 13h6M9 17h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
-            <div><h4>No padrao do laudo</h4><p>A planilha sai no modelo aprovado, com as fotos da vistoria numeradas no lugar certo.</p></div>
+            <div><h4>No padrão do laudo</h4><p>A planilha sai no modelo aprovado, com as fotos da vistoria numeradas no lugar certo.</p></div>
           </div>
           <div class="benefit">
             <span class="benefit-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3 4 6v6c0 5 3.5 7.5 8 9 4.5-1.5 8-4 8-9V6l-8-3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-            <div><h4>IA que nao inventa</h4><p>So preenche o que esta nas anotacoes. O que nao foi informado fica em branco &mdash; nada de dado inventado.</p></div>
+            <div><h4>IA que não inventa</h4><p>Só preenche o que está nas anotações. O que não foi informado fica em branco &mdash; nada de dado inventado.</p></div>
           </div>
           <div class="benefit">
             <span class="benefit-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16v13H4V7Z" stroke="currentColor" stroke-width="2"/><path d="m8 7 2-3h4l2 3M8 14l3 3 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-            <div><h4>Texto tecnico pronto</h4><p>Transforma anotacoes pobres em redacao tecnica de qualidade, no tom de analise de credito.</p></div>
+            <div><h4>Texto técnico pronto</h4><p>Transforma anotações pobres em redação técnica de qualidade, no tom de análise de crédito.</p></div>
           </div>
         </div>
 
@@ -817,7 +817,7 @@ def render_credit_report_page() -> str:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>__BRAND__ | Relatorio de credito</title>
+  <title>__BRAND__ | Relatório de crédito</title>
   <style>
     __BASE_CSS__
     .hero.compact { padding: 22px 28px 20px; }
@@ -1048,12 +1048,12 @@ def render_credit_report_page() -> str:
         <section class="hero compact">
           <div class="hero-top">
             <div>
-              <span class="eyebrow">Ferramenta &middot; Credito rural</span>
+              <span class="eyebrow">Ferramenta &middot; Crédito rural</span>
               <h1>Gerador de <span class="accent">planilha final</span></h1>
-              <p class="lead">Cole as anotacoes da vistoria, anexe as fotos e baixe o Excel ja no padrao do laudo.</p>
+              <p class="lead">Cole as anotações da vistoria, anexe as fotos e baixe o Excel já no padrão do laudo.</p>
               <div class="hero-strip">
                 <span class="hero-chip"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3l1.8 4.7L18.5 9.5 13.8 11.3 12 16l-1.8-4.7L5.5 9.5 10.2 7.7 12 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>IA integrada</span>
-                <span class="hero-chip"><svg viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Extracao automatica</span>
+                <span class="hero-chip"><svg viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Extração automática</span>
                 <span class="hero-chip"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16v13H4V7Z" stroke="currentColor" stroke-width="2"/><path d="m8 7 2-3h4l2 3" stroke="currentColor" stroke-width="2"/></svg>Fotos numeradas</span>
                 <span class="hero-chip"><svg viewBox="0 0 24 24" fill="none"><path d="M6 3h9l3 3v15H6V3Z" stroke="currentColor" stroke-width="2"/></svg>XLSX</span>
               </div>
@@ -1066,7 +1066,7 @@ def render_credit_report_page() -> str:
             <div class="panel-head">
               <div class="panel-title">
                 <svg viewBox="0 0 24 24" fill="none"><path d="M4 5h16M4 12h16M4 19h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                Entrada do relatorio
+                Entrada do relatório
               </div>
               <button class="clear-btn" type="button" id="clearBtn">
                 <svg viewBox="0 0 24 24" fill="none"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v3.6h3.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1076,13 +1076,13 @@ def render_credit_report_page() -> str:
             <div class="panel-body">
               <div class="notes-card">
                 <div class="notes-head">
-                  <label for="rawData">Anotacoes da vistoria</label>
+                  <label for="rawData">Anotações da vistoria</label>
                   <button type="button" id="sampleBtn" class="link-btn">
                     <svg viewBox="0 0 24 24" fill="none"><path d="M12 3l1.6 4.2L18 9l-4.4 1.8L12 15l-1.6-4.2L6 9l4.4-1.8L12 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
                     Ver exemplo
                   </button>
                 </div>
-                <textarea id="rawData" placeholder="Cole aqui as anotacoes da vistoria, do jeito que voce recebeu do campo &mdash; nao precisa organizar.&#10;&#10;Se tiver, ajuda incluir:&#10;&bull; Produtor, propriedade e municipio&#10;&bull; Area (alqueires ou hectares)&#10;&bull; Rebanho ou lavouras&#10;&bull; Benfeitorias (curral, cochos, bebedouros, galpao...)&#10;&bull; Maquinarios"></textarea>
+                <textarea id="rawData" placeholder="Cole aqui as anotações da vistoria, do jeito que você recebeu do campo &mdash; não precisa organizar.&#10;&#10;Se tiver, ajuda incluir:&#10;&bull; Produtor, propriedade e município&#10;&bull; Área (alqueires ou hectares)&#10;&bull; Rebanho ou lavouras&#10;&bull; Benfeitorias (curral, cochos, bebedouros, galpão...)&#10;&bull; Maquinários"></textarea>
               </div>
 
               <div class="upload-card">
@@ -1093,7 +1093,7 @@ def render_credit_report_page() -> str:
                   </span>
                   <span>
                     <strong>Selecionar fotos da vistoria</strong>
-                    <small>Escolha varias imagens de uma vez ou arraste aqui</small>
+                    <small>Escolha várias imagens de uma vez ou arraste aqui</small>
                   </span>
                 </label>
                 <span class="file-count" id="fileCount">Nenhuma foto selecionada</span>
@@ -1107,7 +1107,7 @@ def render_credit_report_page() -> str:
                   <span class="spinner" aria-hidden="true"></span>
                   <span class="btn-label">Gerar e baixar planilha</span>
                 </button>
-                <p class="muted">O texto tecnico e a extracao acontecem automaticamente antes do download.</p>
+                <p class="muted">O texto técnico e a extração acontecem automaticamente antes do download.</p>
               </div>
 
               <input type="hidden" id="reviewData" name="review_data">
@@ -1129,9 +1129,9 @@ def render_credit_report_page() -> str:
                   <strong id="statusTile">Pronto para gerar</strong>
                 </div>
                 <div class="steps">
-                  <div class="step"><span class="step-num">1</span><div><strong>Cole as anotacoes</strong><span>Texto bruto da visita, do jeito que recebeu.</span></div></div>
-                  <div class="step"><span class="step-num">2</span><div><strong>Anexe as fotos</strong><span>Elas entram numeradas no padrao do laudo.</span></div></div>
-                  <div class="step"><span class="step-num">3</span><div><strong>Baixe a planilha</strong><span>Texto tecnico e campos preenchidos automaticamente.</span></div></div>
+                  <div class="step"><span class="step-num">1</span><div><strong>Cole as anotações</strong><span>Texto bruto da visita, do jeito que recebeu.</span></div></div>
+                  <div class="step"><span class="step-num">2</span><div><strong>Anexe as fotos</strong><span>Elas entram numeradas no padrão do laudo.</span></div></div>
+                  <div class="step"><span class="step-num">3</span><div><strong>Baixe a planilha</strong><span>Texto técnico e campos preenchidos automaticamente.</span></div></div>
                 </div>
               </div>
             </section>
@@ -1141,8 +1141,8 @@ def render_credit_report_page() -> str:
             <div class="summary" id="summaryItems"></div>
             <div id="fields" class="fields"></div>
             <textarea id="technicalPreview"></textarea>
-            <button type="button" id="writeBtn" data-label="Gerar texto tecnico"></button>
-            <button type="button" id="extractBtn" data-label="Atualizar extracao"></button>
+            <button type="button" id="writeBtn" data-label="Gerar texto técnico"></button>
+            <button type="button" id="extractBtn" data-label="Atualizar extração"></button>
             <strong id="statusText">Pronto para gerar</strong>
             <div id="previewBox"></div>
             <div id="okBox"></div>
@@ -1194,23 +1194,23 @@ def render_credit_report_page() -> str:
   }
 
   const SAMPLE_NOTES = [
-    'Jose Carlos Ferreira',
+    'José Carlos Ferreira',
     'CPF 123.456.789-00',
-    'Acesso: saindo de Rio Verde-GO pela GO-174, ande 12 km e vire a direita na estrada de chao, mais 3 km ate a porteira',
+    'Acesso: saindo de Rio Verde-GO pela GO-174, ande 12 km e vire à direita na estrada de chão, mais 3 km até a porteira',
     '',
-    'Fazenda Boa Esperanca - Rio Verde-GO',
+    'Fazenda Boa Esperança - Rio Verde-GO',
     '80 hectares',
     '55 hectares de pastagem',
     '20 hectares de soja',
-    'Pecuaria de corte e lavoura de soja',
-    '320 cabecas de gado nelore - cria e recria',
-    'Pastagem de brachiaria',
+    'Pecuária de corte e lavoura de soja',
+    '320 cabeças de gado nelore - cria e recria',
+    'Pastagem de braquiária',
     '2 currais',
     'cochos cobertos nos piquetes',
     'bebedouros nos piquetes',
     '1 represa',
-    'galpao de armazenagem de maquinarios',
-    '2 funcionarios fixos',
+    'galpão de armazenagem de maquinários',
+    '2 funcionários fixos',
     '',
     'Trator Massey Ferguson 4292',
     'Colheitadeira John Deere 1550',
@@ -1278,14 +1278,14 @@ def render_credit_report_page() -> str:
     technicalText.value = technicalPreview.value;
     reviewData.value = '';
     lastExtraction = null;
-    setStatus('Extracao pendente');
-    missingBox.textContent = 'Texto alterado. Atualize a extracao antes de gerar.';
+    setStatus('Extração pendente');
+    missingBox.textContent = 'Texto alterado. Atualize a extração antes de gerar.';
     missingBox.className = 'notice show';
   });
 
   async function generateTechnicalReport() {
     const rawText = rawData.value.trim();
-    if (!rawText) throw new Error('Cole as anotacoes da vistoria.');
+    if (!rawText) throw new Error('Cole as anotações da vistoria.');
     writerNotice.className = 'notice';
     writerNotice.textContent = '';
 
@@ -1295,7 +1295,7 @@ def render_credit_report_page() -> str:
       body: JSON.stringify({ raw_text: rawText })
     });
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || 'Nao consegui gerar o relatorio.');
+    if (!response.ok) throw new Error(payload.error || 'Não consegui gerar o relatório.');
 
     technicalText.value = payload.report_text || '';
     technicalPreview.value = payload.report_text || '';
@@ -1321,9 +1321,9 @@ def render_credit_report_page() -> str:
         body: JSON.stringify({ dados })
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'Nao consegui atualizar a extracao.');
+      if (!response.ok) throw new Error(payload.error || 'Não consegui atualizar a extração.');
       renderFields(payload);
-      setStatus('Extracao pronta');
+      setStatus('Extração pronta');
       return true;
     } catch (error) {
       showError(error.message);
@@ -1360,7 +1360,7 @@ def render_credit_report_page() -> str:
       if (field.required) {
         const required = document.createElement('span');
         required.className = 'required';
-        required.textContent = field.missing ? 'faltando' : 'obrigatorio';
+        required.textContent = field.missing ? 'faltando' : 'obrigatório';
         label.appendChild(required);
       }
       const input = field.type === 'textarea' ? document.createElement('textarea') : document.createElement('input');
@@ -1381,7 +1381,7 @@ def render_credit_report_page() -> str:
 
   function fieldValue(payload, key) {
     const item = payload.fields.find((field) => field.key === key);
-    return item && item.value ? item.value : 'Nao informado';
+    return item && item.value ? item.value : 'Não informado';
   }
 
   function renderSummary(payload) {
@@ -1391,7 +1391,7 @@ def render_credit_report_page() -> str:
   function renderSummaryFromInputs() {
     const getValue = (key) => {
       const input = fieldsEl.querySelector(`[data-key="${key}"]`);
-      return input && input.value ? input.value : 'Nao informado';
+      return input && input.value ? input.value : 'Não informado';
     };
     renderSummary({
       fields: [
@@ -1438,7 +1438,7 @@ def render_credit_report_page() -> str:
     writerNotice.className = 'notice show';
     missingBox.textContent = message;
     missingBox.className = 'notice show';
-    setStatus('Atencao');
+    setStatus('Atenção');
   }
 
   function filenameFromResponse(response) {
@@ -1452,7 +1452,7 @@ def render_credit_report_page() -> str:
     const response = await fetch('/generate', { method: 'POST', body: formData });
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(text.replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim() || 'Nao consegui gerar a planilha.');
+      throw new Error(text.replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim() || 'Não consegui gerar a planilha.');
     }
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
@@ -1480,7 +1480,7 @@ def render_credit_report_page() -> str:
       </div>
     `).join('');
     if (total > 6) {
-      fileList.insertAdjacentHTML('beforeend', `<div class="file-pill"><span>Mais ${total - 6} foto(s)</span><small>incluidas</small></div>`);
+      fileList.insertAdjacentHTML('beforeend', `<div class="file-pill"><span>Mais ${total - 6} foto(s)</span><small>incluídas</small></div>`);
     }
   });
 
@@ -1515,11 +1515,11 @@ def render_credit_report_page() -> str:
     setAllBusy(true, 'Gerando');
     try {
       if (!technicalText.value.trim()) {
-        showOverlay('Escrevendo relatorio', 'Convertendo as anotacoes em texto tecnico.');
+        showOverlay('Escrevendo relatório', 'Convertendo as anotações em texto técnico.');
         await generateTechnicalReport();
       }
       if (!reviewData.value) {
-        showOverlay('Extraindo campos', 'Separando cliente, areas e propriedades.');
+        showOverlay('Extraindo campos', 'Separando cliente, áreas e propriedades.');
         const ok = await refreshFieldsFromTechnicalText();
         if (!ok) return;
       }
