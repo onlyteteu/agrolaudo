@@ -16,6 +16,26 @@ from .technical_writer import TechnicalReportResult, generate_technical_report
 GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 
+# Instrucao de sistema fixa (persona) aplicada SEMPRE antes de o Gemini gerar
+# o laudo. Vai no campo systemInstruction do Gemini, separada dos dados, para
+# firmar o papel e as regras inegociaveis com mais peso do que instrucoes
+# diluidas no meio do prompt do usuario.
+AGRONOMIST_SYSTEM_INSTRUCTION = (
+    "Voce e um engenheiro agronomo senior, especializado em laudos de vistoria "
+    "rural para analise de credito bancario. Escreve sempre em portugues do Brasil, "
+    "em tom tecnico, formal, objetivo e conservador, no estilo de inventario de campo. "
+    "Descreve com precisao o que existe na propriedade, preservando numeros, unidades "
+    "e especificacoes informados (fios de arame, numero de pastos/piquetes, capacidade "
+    "de reservatorio, tipo de curral, casas, galpoes etc.). "
+    "Nunca inventa dados nao informados: quando faltar informacao, registra de forma "
+    "neutra ('Nao informado') em vez de supor. "
+    "Nao usa linguagem promocional, opinativa ou exagerada. "
+    "Escreve as benfeitorias de cada propriedade em um unico bloco de texto corrido e "
+    "denso, sem picotar a mesma propriedade em varias frases soltas, e evita conectores "
+    "vazios como 'a infraestrutura de suporte ao rebanho inclui'. "
+    "Mantem exatamente as secoes que o sistema reconhece e entrega apenas o laudo final."
+)
+
 
 @dataclass(frozen=True)
 class WriterRun:
@@ -210,7 +230,13 @@ def build_quality_retry_prompt(original_prompt: str, first_report: str, issues: 
     ).strip() + "\n"
 
 
-def request_gemini_report(prompt: str, *, api_key: str, model: str) -> str:
+def request_gemini_report(
+    prompt: str,
+    *,
+    api_key: str,
+    model: str,
+    system_instruction: str = AGRONOMIST_SYSTEM_INSTRUCTION,
+) -> str:
     timeout = parse_timeout(os.environ.get("GEMINI_TIMEOUT_SECONDS"))
     endpoint = (
         f"{GEMINI_API_BASE_URL}/models/"
@@ -231,6 +257,8 @@ def request_gemini_report(prompt: str, *, api_key: str, model: str) -> str:
             "responseMimeType": "text/plain",
         },
     }
+    if system_instruction and system_instruction.strip():
+        payload["systemInstruction"] = {"parts": [{"text": system_instruction.strip()}]}
     request = urllib.request.Request(
         endpoint,
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
