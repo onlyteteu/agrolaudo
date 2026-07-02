@@ -326,6 +326,10 @@ REGRAS DE REDACAO E PROFUNDIDADE:
 - Nao incluir recomendacoes agronomicas fora da conclusao tecnica para credito rural.
 - O texto nao pode ser raso. Quando houver dados produtivos, desenvolva a analise em paragrafos completos.
 - A secao 2. TIPO deve ser a parte mais bem desenvolvida, descrevendo uso, escala, pastagens, piquetes, cochos, cercas, currais, casas, galpoes, confinamento, recursos hidricos, culturas e suporte operacional quando informados.
+- Na secao 2. TIPO, escreva as benfeitorias de CADA propriedade em UM UNICO bloco de texto corrido (um paragrafo denso), sem picotar em varias frases curtas separadas. O Excel usa um bloco por propriedade; nao fragmente a mesma propriedade em varios blocos.
+- Prefira estilo tecnico de inventario, objetivo e denso, preservando os numeros e especificacoes informados (por exemplo: cerca de arame liso com 5 fios, 90 pastos/piquetes, reservatorio de 300 mil litros, curral em cordoalha, cochos cobertos, casa sede e casas de funcionarios). Nao dilua os dados concretos em texto generico.
+- Evite conectores vazios e narrados como "a infraestrutura de suporte ao rebanho inclui" ou "a estrutura de apoio as operacoes conta com". Va direto aos itens e suas caracteristicas, no tom de vistoria de campo.
+- Quando informado, registre o estado de conservacao e os pontos de manutencao (por exemplo: areas de pastagem que necessitam de reforma ou recuperacao), sem inventar o que nao foi dito.
 - Quando houver mais de uma propriedade, area arrendada ou unidade produtiva, separar claramente cada uma, sem misturar dados.
 - Em casos com poucos dados brutos, enriquecer apenas a redacao tecnica com base nos dados existentes, sem criar estrutura nao informada.
 - Manter exatamente as secoes que o Excel reconhece: 1. DISCRIMINACAO; 2. TIPO (Benfeitorias e Infraestrutura); 3. DESCRICAO (Maquinas, Equipamentos e Implementos); INVESTIMENTOS EM ANDAMENTO (Comentarios); OUTROS COMENTARIOS; CONCLUSAO; FRASES DIRETAS.

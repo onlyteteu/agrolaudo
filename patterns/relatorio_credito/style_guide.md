@@ -35,6 +35,10 @@ Campos principais:
 
 Descrever a estrutura por propriedade quando as anotações separarem as unidades. Benfeitorias gerais devem ir para comentários gerais quando não pertencerem a uma propriedade específica.
 
+Escrever as benfeitorias de cada propriedade em um único bloco de texto corrido (um parágrafo denso), sem picotar a mesma propriedade em várias frases curtas separadas — o Excel usa um bloco por propriedade.
+
+Preferir estilo de inventário técnico, objetivo e denso, preservando os números e especificações informados (ex.: cerca de arame liso com 5 fios, quantidade de pastos/piquetes, capacidade de reservatório, curral em cordoalha, cochos cobertos, casa sede e casas de funcionários). Registrar o estado de conservação e pontos de manutenção (ex.: pastagens que necessitam de reforma ou recuperação) quando informados.
+
 3. DESCRIÇÃO (Máquinas, Equipamentos e Implementos)
 
 Listar máquinas e implementos de forma objetiva. Quando possível, separar descrição, fabricante e modelo no texto, mas sem inventar dados.
@@ -60,4 +64,5 @@ Frase curta, em caixa alta, com atividade, área e ponto técnico principal.
 - Técnico, claro e conservador.
 - Preferir frases assertivas e verificáveis.
 - Evitar exageros como "excelente", "altíssimo" ou "robusto" sem dado que sustente.
+- Evitar conectores vazios e narrados como "a infraestrutura de suporte ao rebanho inclui" ou "a estrutura de apoio às operações conta com"; ir direto aos itens e suas características.
 - Usar "conforme informado" quando o dado vier de anotação bruta.
