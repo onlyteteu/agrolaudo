@@ -8,7 +8,7 @@ import urllib.request
 from dataclasses import dataclass
 
 from .env import load_env_file
-from .pattern_library import build_writer_prompt, select_pattern_examples
+from .pattern_library import build_enrichment_prompt, build_writer_prompt, select_pattern_examples
 from .report_engine import parse_report_data
 from .report_schema import REPORT_JSON_SCHEMA, build_extraction_prompt, coerce_structured_data
 from .technical_writer import TechnicalReportResult, generate_technical_report
@@ -65,9 +65,35 @@ class WriterRun:
         return payload
 
 
+# Campos de PROSA que a IA enriquece. Todo o resto (cliente, cpf, areas,
+# imoveis, equipamentos, insumos) vem do nosso motor deterministico e nunca e
+# decidido pela IA — o que elimina numeros errados e celulas vazias.
+PROSE_FIELDS = (
+    "benfeitorias_descricao",
+    "benfeitorias_observacoes",
+    "investimentos_comentarios",
+    "outros_comentarios",
+    "conclusao",
+    "insumos_comentarios",
+)
+
+
 def generate_technical_report_auto(raw_text: str) -> WriterRun:
+    """Motor preenche, IA enriquece.
+
+    1) O motor deterministico le as anotacoes e monta um rascunho correto (todas
+       as secoes, numeros certos) -> ``base_structured`` alimenta a planilha.
+    2) A IA (1 chamada) reescreve o rascunho em prosa rica, SEM mexer nos fatos.
+    3) So os campos de PROSA da IA sao sobrepostos; os dados continuam do motor.
+
+    Se a IA falhar (sem credito, timeout etc.), usa-se o rascunho do motor: o
+    laudo sai completo do mesmo jeito, apenas com redacao mais simples."""
     load_env_file()
     local_result = generate_technical_report(raw_text)
+    base_structured = parse_report_data(local_result.report_text)
+    if isinstance(base_structured, dict):
+        base_structured["_structured"] = True
+
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     model = os.environ.get("GEMINI_MODEL", DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL
 
@@ -78,42 +104,34 @@ def generate_technical_report_auto(raw_text: str) -> WriterRun:
             provider="local",
             model="local-rules-v1",
             fallback_reason="GEMINI_API_KEY não configurada.",
-            structured=parse_report_data(local_result.report_text),
-            structured_source="regex",
+            structured=base_structured,
+            structured_source="motor",
         )
 
     try:
-        prompt = build_writer_prompt(raw_text, local_result.report_text, max_examples=3)
-        report_text = request_gemini_report(prompt, api_key=api_key, model=model)
-        quality_issues = assess_report_quality(report_text)
-        if quality_issues:
-            retry_prompt = build_quality_retry_prompt(prompt, report_text, quality_issues)
-            improved_text = request_gemini_report(retry_prompt, api_key=api_key, model=model)
-            if len(improved_text.strip()) >= len(report_text.strip()):
-                report_text = improved_text
-        parsed = parse_report_data(report_text)
-        if not parsed.get("cliente") or not parsed.get("imovel_nome"):
-            raise GeminiWriterError("A resposta da IA não trouxe campos mínimos reconhecíveis.")
+        prompt = build_enrichment_prompt(local_result.report_text, raw_text, max_examples=1)
+        enriched_text = request_gemini_report(prompt, api_key=api_key, model=model)
 
-        # Extracao estruturada: a IA devolve os campos diretamente (fonte da
-        # verdade). Se falhar, caimos para a releitura por regex acima.
-        structured, structured_source = resolve_structured_data(
-            raw_text, report_text, parsed, api_key=api_key, model=model
-        )
-        # Reforco do preenchimento: o JSON estruturado e otimo para fatos
-        # (areas, imoveis), mas costuma deixar VAZIAS as secoes de prosa
-        # (conclusao, outros comentarios, investimentos) e ate areas por
-        # propriedade, pois so extrai o que esta "nas anotacoes". O texto do
-        # laudo tem todas as secoes; usamos o structured como base e preenchemos
-        # apenas os buracos com o parser do texto, evitando celulas vazias.
-        structured = merge_structured_with_text(structured, parsed)
+        # Se a IA encurtou demais o rascunho, pede uma versao mais desenvolvida.
+        if len(enriched_text.strip()) < len(local_result.report_text.strip()):
+            retry_prompt = (
+                prompt.rstrip()
+                + "\n\nA versao anterior ficou curta demais. Reescreva desenvolvendo cada secao "
+                "com mais profundidade tecnica, mantendo os mesmos numeros, fatos e titulos.\n"
+            )
+            retry_text = request_gemini_report(retry_prompt, api_key=api_key, model=model)
+            if len(retry_text.strip()) > len(enriched_text.strip()):
+                enriched_text = retry_text
+
+        enriched_parsed = parse_report_data(enriched_text)
+        structured = overlay_prose(base_structured, enriched_parsed)
         return WriterRun(
-            result=TechnicalReportResult(report_text=report_text, notes=local_result.notes, source=f"gemini:{model}"),
+            result=TechnicalReportResult(report_text=enriched_text, notes=local_result.notes, source=f"gemini:{model}"),
             used_ai=True,
             provider="gemini",
             model=model,
             structured=structured,
-            structured_source=structured_source,
+            structured_source="motor+ia",
         )
     except Exception as exc:
         return WriterRun(
@@ -122,9 +140,24 @@ def generate_technical_report_auto(raw_text: str) -> WriterRun:
             provider="local",
             model="local-rules-v1",
             fallback_reason=f"Gemini indisponível: {exc}",
-            structured=parse_report_data(local_result.report_text),
-            structured_source="regex",
+            structured=base_structured,
+            structured_source="motor",
         )
+
+
+def overlay_prose(base: dict, enriched: dict | None) -> dict:
+    """Mantem TODOS os dados do motor (``base``) e sobrepoe apenas os campos de
+    prosa vindos do texto enriquecido pela IA, quando presentes."""
+    if not isinstance(base, dict):
+        return base
+    merged = dict(base)
+    if isinstance(enriched, dict):
+        for field in PROSE_FIELDS:
+            value = enriched.get(field)
+            if value not in (None, ""):
+                merged[field] = value
+    merged["_structured"] = True
+    return merged
 
 
 def resolve_structured_data(

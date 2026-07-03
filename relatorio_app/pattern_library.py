@@ -399,6 +399,55 @@ PADRAO DE QUALIDADE:
     )
     return "\n".join(parts).strip() + "\n"
 
+
+def build_enrichment_prompt(draft_text: str, raw_text: str = "", max_examples: int = 1) -> str:
+    """Prompt de ENRIQUECIMENTO: a IA reescreve um rascunho ja correto (feito pelo
+    nosso motor), deixando-o mais rico, SEM alterar numeros/fatos nem inventar.
+
+    Diferente de build_writer_prompt (que pedia o laudo do zero), aqui a IA tem
+    uma unica funcao: linguagem. Os dados sao responsabilidade do motor."""
+    style_guide = load_style_guide().strip()
+    rules = """
+TAREFA: ENRIQUECER (reescrever) o rascunho tecnico abaixo, deixando-o mais completo, denso e bem desenvolvido, no padrao de laudo de vistoria para analise bancaria de credito rural.
+
+REGRAS INEGOCIAVEIS:
+- MANTENHA EXATAMENTE todos os numeros, nomes, areas, quantidades, culturas e fatos do rascunho. NUNCA altere valores nem unidades.
+- NAO invente nada que nao esteja no rascunho (nem benfeitorias, nem culturas, nem numeros, nem recursos).
+- Mantenha EXATAMENTE os mesmos titulos de secao do rascunho, na mesma ordem: 1. DISCRIMINACAO; 2. TIPO (Benfeitorias e Infraestrutura); 3. DESCRICAO (Maquinas, Equipamentos e Implementos); INVESTIMENTOS EM ANDAMENTO (Comentarios); OUTROS COMENTARIOS; CONCLUSAO; FRASES DIRETAS.
+- Desenvolva CADA secao com profundidade e linguagem tecnica de agronomo. A secao 2. TIPO deve ser a mais rica, em UM UNICO bloco denso por propriedade (comece com "Na Fazenda <nome>,"), sem picotar.
+- 'Denso' = rico em conteudo tecnico, nunca curto. Aproveite cada dado do rascunho.
+- Linguagem formal, objetiva e conservadora; sem adjetivos vazios ("excelente", "robusto", "altissimo") sem dado que sustente.
+- Entregue APENAS o relatorio final reescrito, sem comentarios sobre o processo.
+""".strip()
+
+    parts = ["Voce e um engenheiro agronomo que aprimora a redacao de laudos tecnicos de credito rural."]
+    if style_guide:
+        parts.extend(["", "GUIA DE ESTILO:", style_guide])
+    parts.extend(["", rules])
+
+    if raw_text.strip():
+        approved = [ex for ex in select_pattern_examples(raw_text, limit=max_examples).examples if ex.has_expected]
+        if approved:
+            parts.extend(
+                [
+                    "",
+                    "EXEMPLO DE PADRAO APROVADO (imite o ESTILO, nao copie os dados):",
+                    clip_text(approved[0].expected_text, 4200),
+                ]
+            )
+
+    parts.extend(
+        [
+            "",
+            "RASCUNHO A ENRIQUECER (fonte da verdade dos fatos e numeros; nao altere valores):",
+            draft_text.strip(),
+            "",
+            "Reescreva o relatorio final, mais rico e desenvolvido, mantendo exatamente os mesmos fatos, numeros e titulos de secao.",
+        ]
+    )
+    return "\n".join(parts).strip() + "\n"
+
+
 def clip_text(value: str, max_chars: int) -> str:
     text = value.strip()
     if len(text) <= max_chars:
