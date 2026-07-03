@@ -778,24 +778,61 @@ def parse_equipment_section(section: str) -> list[dict[str, Any]]:
         ]
     cleaned = clean_equipment_description(section)
     if cleaned:
-        items = [part.strip(" .;:-") for part in re.split(r"\s*;\s*", cleaned) if part.strip(" .;:-")]
+        items = [part.strip(" .;:-") for part in re.split(r"\s*;\s*|\n", cleaned) if part.strip(" .;:-")]
         if not items:
             items = [cleaned]
-        return [
-            {
-                "descricao": item,
-                "fabricante": "-",
-                "modelo": "-",
-                "estado": "BOM",
-                "financiado_bb": "NÃO",
-                "financiado_outros": "NÃO",
-                "segurado": "NÃO",
-                "gravame": "NÃO",
-                "outras_informacoes": "",
-            }
-            for item in items
-        ]
+        result: list[dict[str, Any]] = []
+        for item in items:
+            descricao, fabricante, modelo = split_equipment_item(item)
+            result.append(
+                {
+                    "descricao": descricao,
+                    "fabricante": fabricante,
+                    "modelo": modelo,
+                    "estado": "BOM",
+                    "financiado_bb": "NÃO",
+                    "financiado_outros": "NÃO",
+                    "segurado": "NÃO",
+                    "gravame": "NÃO",
+                    "outras_informacoes": "",
+                }
+            )
+        return result
     return []
+
+
+# Marcas conhecidas de maquinas/implementos/veiculos, para separar
+# descricao / fabricante / modelo de uma linha como "Trator Massey Ferguson 4292".
+# Ordenadas por tamanho (as compostas primeiro) para casar corretamente.
+_EQUIPMENT_BRANDS = sorted(
+    [
+        "Massey Ferguson", "New Holland", "John Deere", "Case IH", "Mercedes-Benz",
+        "Valtra", "Case", "Ford", "Fiat", "Agrale", "Yanmar", "Tatu", "Baldan",
+        "Jacto", "Jumil", "Nogueira", "Marchesan", "Randon", "Facchini", "Guerra",
+        "Stara", "Kuhn", "Vicon", "Tramontina", "Hoster", "Andrade", "Acton",
+        "Avaré", "Avare", "Jamil", "Honda", "Yamaha", "Volvo", "Scania", "Iveco",
+        "Volkswagen", "Toyota", "Civemasa", "Piccin", "Montana", "Bernardi",
+        "Lavrale", "Fella", "Krone", "Menta", "DMB", "JF", "VW",
+    ],
+    key=len,
+    reverse=True,
+)
+
+
+def split_equipment_item(item: str) -> tuple[str, str, str]:
+    """Separa 'Trator Massey Ferguson 4292' em (descricao, fabricante, modelo).
+    Sem marca reconhecida, devolve o texto inteiro como descricao."""
+    text = normalize_spaces(str(item or "")).strip(" .;:-")
+    if not text:
+        return text, "-", "-"
+    for brand in _EQUIPMENT_BRANDS:
+        match = re.search(rf"\b{re.escape(brand)}\b", text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        descricao = text[: match.start()].strip(" .,;:-")
+        modelo = text[match.end():].strip(" .,;:-")
+        return (descricao or text), match.group(0), (modelo or "-")
+    return text, "-", "-"
 
 
 def clean_equipment_description(value: Any) -> str:
@@ -1261,9 +1298,21 @@ def style_benfeitoria_text_cell(worksheet: Worksheet, coordinate: str) -> None:
 
 
 def adjust_benfeitoria_row_heights(worksheet: Worksheet, start_row: int, end_row: int, text: str) -> None:
-    line_count = max(2, (len(text) // 95) + text.count("\n") + 1)
-    total_height = max(42, min(150, line_count * 15 + 12))
-    row_height = total_height / (end_row - start_row + 1)
+    # A celula de benfeitorias e a mesclagem A:E, que cabe ~50 caracteres por
+    # linha visual. Estimamos quantas linhas o texto ocupa (quebra automatica,
+    # arredondando para cima) somando as quebras explicitas, e damos altura
+    # suficiente para o texto NAO ficar cortado/escondido (exigindo clique).
+    # O teto antigo (150pt) cortava a prosa enriquecida pela IA.
+    text = str(text or "")
+    chars_per_line = 50
+    line_height = 16
+    visual_lines = 0
+    for paragraph in text.split("\n"):
+        visual_lines += max(1, -(-len(paragraph) // chars_per_line))
+    line_count = max(2, visual_lines)
+    total_height = max(42, min(600, line_count * line_height + 12))
+    rows = max(1, end_row - start_row + 1)
+    row_height = total_height / rows
     for row in range(start_row, end_row + 1):
         worksheet.row_dimensions[row].height = max(18, row_height)
 

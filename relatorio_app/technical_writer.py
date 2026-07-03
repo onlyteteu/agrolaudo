@@ -81,6 +81,13 @@ def parse_raw_visit_notes(raw_text: str) -> RawVisitNotes:
             notes.equipment.append(normalize_equipment(line))
             continue
 
+        # Captura maquinas/implementos MESMO sem um cabecalho "Maquinarios".
+        # Antes, sem esse cabecalho, as linhas de maquina viravam comentario da
+        # propriedade e se perdiam (secao 3 vinha "Nao informado").
+        if is_machine_line(normalized):
+            notes.equipment.append(normalize_equipment(line))
+            continue
+
         rented = parse_rented_area_line(line)
         if rented:
             current_property = PropertyNote(**rented)
@@ -138,6 +145,28 @@ def is_equipment_heading(normalized: str) -> bool:
         "equipamentos",
         "implementos",
     }
+
+
+# Tipos de maquina/implemento reconheciveis mesmo sem cabecalho. Sao termos
+# especificos (nao inclui "maquinario"/"galpao", para nao confundir com
+# benfeitorias como "galpao de armazenagem de maquinarios").
+_MACHINE_TERMS = {
+    "trator", "tratores", "microtrator", "colheitadeira", "colhedora",
+    "plantadeira", "semeadeira", "adubadeira", "pulverizador", "pulverizadora",
+    "grade", "aradora", "niveladora", "arado", "subsolador", "sulcador",
+    "escarificador", "caminhao", "caminhoneta", "caminhonete", "caminhonete",
+    "moto", "motocicleta", "carreta", "reboque", "ensiladeira", "forrageira",
+    "rocadeira", "rocadeiras", "guincho", "distribuidor", "distribuidora",
+    "esparramador", "esparramadora", "esparramadeira", "vagao", "comboio",
+    "retroescavadeira", "escavadeira", "empilhadeira", "enfardadeira",
+    "ordenhadeira", "motoniveladora", "plataforma", "triturador", "batedeira",
+    "carregadeira", "colhedeira",
+}
+
+
+def is_machine_line(normalized: str) -> bool:
+    tokens = set(normalized.split("_"))
+    return any(term in tokens for term in _MACHINE_TERMS)
 
 
 def parse_property_header(line: str) -> dict[str, Any] | None:
