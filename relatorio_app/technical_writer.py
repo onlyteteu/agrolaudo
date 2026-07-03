@@ -12,14 +12,15 @@ ALQUEIRE_GOIANO_HA = 4.84
 @dataclass
 class PropertyNote:
     name: str
-    area_alqueires: float | None = None
+    area_ha: float | None = None
     status: str = ""
     lines: list[str] = field(default_factory=list)
     livestock: list[str] = field(default_factory=list)
     crops: list[str] = field(default_factory=list)
-    crop_area_alqueires: float = 0.0
-    livestock_area_alqueires: float = 0.0
-    confinement_area_alqueires: float = 0.0
+    crop_area_ha: float = 0.0
+    livestock_area_ha: float = 0.0
+    confinement_area_ha: float = 0.0
+    pasture_area_ha: float = 0.0
     phases: list[str] = field(default_factory=list)
     pastures: list[str] = field(default_factory=list)
     improvements: list[str] = field(default_factory=list)
@@ -99,9 +100,9 @@ def parse_raw_visit_notes(raw_text: str) -> RawVisitNotes:
             continue
 
         if current_property:
-            standalone_area = parse_standalone_alqueire_area(line)
-            if standalone_area is not None and current_property.area_alqueires is None:
-                current_property.area_alqueires = standalone_area
+            standalone_area = parse_standalone_area(line)
+            if standalone_area is not None and current_property.area_ha is None:
+                current_property.area_ha = standalone_area
                 current_property.lines.append(line)
                 continue
             current_property.lines.append(line)
@@ -141,7 +142,7 @@ def is_equipment_heading(normalized: str) -> bool:
 
 def parse_property_header(line: str) -> dict[str, Any] | None:
     match = re.match(
-        r"^(?P<name>(?:Fazenda|S[ií]tio|Sitio|Ch[aá]cara|Chacara|Est[aâ]ncia|Estancia|Rancho|Gleba|Granja|Retiro|Lote|Im[oó]vel|Propriedade)\b.+?)\s*[-–]\s*(?P<area>\d+(?:[,.]\d+)?)\s*(?:alqueires?|aqueires?)(?P<tail>.*)$",
+        r"^(?P<name>(?:Fazenda|S[ií]tio|Sitio|Ch[aá]cara|Chacara|Est[aâ]ncia|Estancia|Rancho|Gleba|Granja|Retiro|Lote|Im[oó]vel|Propriedade)\b.+?)\s*[-–]\s*(?P<area>\d+(?:[,.]\d+)?)\s*(?P<unit>alqueires?|aqueires?|hectares?|ha)\b(?P<tail>.*)$",
         line,
         flags=re.IGNORECASE,
     )
@@ -149,14 +150,14 @@ def parse_property_header(line: str) -> dict[str, Any] | None:
         return None
 
     raw_name = title_case_agro(clean_text_value(match.group("name")))
-    area = parse_decimal_pt(match.group("area"))
+    area = _to_hectares(match.group("area"), match.group("unit"))
     tail = clean_text_value(match.group("tail") or "")
     status = extract_status(tail)
     name = raw_name
     if status and status.lower() not in normalize_key(raw_name).replace("_", " "):
         name = f"{raw_name} ({status})"
 
-    return {"name": name, "area_alqueires": float(area), "status": status}
+    return {"name": name, "area_ha": float(area) if area is not None else None, "status": status}
 
 
 def parse_property_name_line(line: str) -> str | None:
@@ -166,28 +167,31 @@ def parse_property_name_line(line: str) -> str | None:
         flags=re.IGNORECASE,
     ):
         return None
-    if re.search(r"\d+(?:[,.]\d+)?\s*(?:alqueires?|aqueires?)", line, flags=re.IGNORECASE):
+    if re.search(r"\d+(?:[,.]\d+)?\s*(?:alqueires?|aqueires?|hectares?|ha)\b", line, flags=re.IGNORECASE):
         return None
     return title_case_agro(clean_text_value(line))
 
 
-def parse_standalone_alqueire_area(line: str) -> float | None:
-    match = re.match(r"^(?:aprox(?:imadamente)?\s*)?(\d+(?:[,.]\d+)?)\s*(?:alqueires?|aqueires?)$", line, flags=re.IGNORECASE)
+def parse_standalone_area(line: str) -> float | None:
+    match = re.match(
+        r"^(?:aprox(?:imadamente)?\s*)?(\d+(?:[,.]\d+)?)\s*(alqueires?|aqueires?|hectares?|ha)$",
+        line,
+        flags=re.IGNORECASE,
+    )
     if not match:
         return None
-    value = parse_decimal_pt(match.group(1))
-    return float(value) if isinstance(value, (float, int)) else None
+    return _to_hectares(match.group(1), match.group(2))
 
 
 def parse_rented_area_line(line: str) -> dict[str, Any] | None:
     normalized = normalize_key(line)
     if not any(term in normalized for term in ("aluguel", "alugada", "alugado", "arrendada", "arrendado")):
         return None
-    area = extract_alqueire_value(line)
+    area = extract_area_ha(line)
     if area is None:
         return None
     label = "Propriedade Área Alugada" if "alug" in normalized else "Propriedade Área Arrendada"
-    return {"name": label, "area_alqueires": area, "status": "arrendada"}
+    return {"name": label, "area_ha": area, "status": "arrendada"}
 
 
 def extract_status(value: str) -> str:
@@ -222,7 +226,7 @@ def extract_labeled_value(line: str) -> str:
 
 def classify_property_line(property_note: PropertyNote, line: str) -> None:
     normalized = normalize_key(line)
-    area = extract_alqueire_value(line)
+    area = extract_area_ha(line)
 
     if "futuros_projetos" in normalized or "projetos_futuros" in normalized:
         return
@@ -234,7 +238,7 @@ def classify_property_line(property_note: PropertyNote, line: str) -> None:
     if normalized.startswith("confinamento"):
         add_unique(property_note.phases, "Confinamento")
         if area:
-            property_note.confinement_area_alqueires += area
+            property_note.confinement_area_ha += area
         property_note.livestock.append(line)
         return
 
@@ -244,13 +248,13 @@ def classify_property_line(property_note: PropertyNote, line: str) -> None:
         if phase:
             add_unique(property_note.phases, phase)
         if area:
-            property_note.livestock_area_alqueires += area
+            property_note.livestock_area_ha += area
         return
 
     if is_crop_line(normalized):
         property_note.crops.append(line)
         if area:
-            property_note.crop_area_alqueires += area
+            property_note.crop_area_ha += area
         return
 
     if normalized in {"cria", "recria", "engorda", "terminacao"}:
@@ -258,7 +262,12 @@ def classify_property_line(property_note: PropertyNote, line: str) -> None:
         return
 
     if is_pasture_line(normalized):
-        add_unique(property_note.pastures, normalize_pasture(line))
+        # "55 hectares de pastagem" -> area de pastagem (nao entra como cultura).
+        if area:
+            property_note.pasture_area_ha += area
+        label = pasture_grass_label(line)
+        if label:
+            add_unique(property_note.pastures, label)
         return
 
     if is_improvement_line(normalized):
@@ -272,12 +281,26 @@ def classify_property_line(property_note: PropertyNote, line: str) -> None:
     property_note.comments.append(line)
 
 
-def extract_alqueire_value(line: str) -> float | None:
-    match = re.search(r"(\d+(?:[,.]\d+)?)\s*(?:alqueires?|aqueires?)", line, flags=re.IGNORECASE)
+_AREA_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(alqueires?|aqueires?|hectares?|ha)\b", re.IGNORECASE)
+
+
+def _to_hectares(value_text: str, unit: str) -> float | None:
+    """Converte um valor + unidade para hectares. Alqueire goiano = 4,84 ha."""
+    value = parse_decimal_pt(value_text)
+    if not isinstance(value, (float, int)):
+        return None
+    unit = unit.lower()
+    if unit.startswith("alq") or unit.startswith("aqu"):
+        return round(float(value) * ALQUEIRE_GOIANO_HA, 2)
+    return float(value)
+
+
+def extract_area_ha(line: str) -> float | None:
+    """Extrai a primeira area do texto, ja em hectares (aceita ha e alqueires)."""
+    match = _AREA_RE.search(line)
     if not match:
         return None
-    value = parse_decimal_pt(match.group(1))
-    return float(value) if isinstance(value, (float, int)) else None
+    return _to_hectares(match.group(1), match.group(2))
 
 
 def extract_phase_from_line(line: str) -> str:
@@ -363,18 +386,26 @@ def add_unique(values: list[str], value: str) -> None:
         values.append(value)
 
 
-def normalize_pasture(line: str) -> str:
+def pasture_grass_label(line: str) -> str:
+    """Devolve 'Pastagens de <capins>' quando a linha cita um capim; caso
+    contrario devolve '' (ex.: '55 hectares de pastagem' nao vira 'cultura')."""
     normalized = normalize_key(line)
     grasses: list[str] = []
     if "andropogon" in normalized:
         grasses.append("Andropogon")
-    if "quicuia" in normalized:
+    if "quicuia" in normalized or "kikuyu" in normalized:
         grasses.append("Quicuia")
-    if "brach" in normalized or "bracg" in normalized or "braqui" in normalized:
-        grasses.append("Braquiarão")
-    if grasses:
-        return "Pastagens de " + ", ".join(grasses)
-    return title_case_agro(line.replace("Patagem", "Pastagem"))
+    if "mombaca" in normalized:
+        grasses.append("Mombaça")
+    if "panicum" in normalized:
+        grasses.append("Panicum")
+    if "marandu" in normalized:
+        grasses.append("Marandu")
+    if "brach" in normalized or "bracg" in normalized or "braqui" in normalized or "brizanth" in normalized:
+        grasses.append("Braquiária")
+    seen: set[str] = set()
+    unique = [g for g in grasses if not (g in seen or seen.add(g))]
+    return "Pastagens de " + ", ".join(unique) if unique else ""
 
 
 def normalize_improvement(line: str) -> str:
@@ -506,9 +537,9 @@ def render_technical_report(notes: RawVisitNotes) -> str:
 
 
 def render_property_discrimination(prop: PropertyNote) -> list[str]:
-    total_ha = alqueires_to_hectares(prop.area_alqueires)
-    pasture_ha = alqueires_to_hectares(resolve_pasture_alqueires(prop))
-    crop_ha = alqueires_to_hectares(resolve_crop_alqueires(prop))
+    total_ha = float(prop.area_ha or 0.0)
+    pasture_ha = resolve_pasture_ha(prop)
+    crop_ha = resolve_crop_ha(prop)
     return [
         prop.name,
         f"Área Total (ha): {format_pt_number(total_ha)} ha",
@@ -520,28 +551,24 @@ def render_property_discrimination(prop: PropertyNote) -> list[str]:
     ]
 
 
-def resolve_pasture_alqueires(prop: PropertyNote) -> float:
-    if prop.livestock_area_alqueires:
-        return prop.livestock_area_alqueires
-    if (prop.pastures or prop.livestock) and prop.area_alqueires is not None:
-        # Pastagem = area total menos o que for lavoura/confinamento declarado.
-        # Sem lavoura declarada, toda a area vira pastagem (segue os modelos
-        # reais; nao inventa divisao de cultivo).
-        remaining = prop.area_alqueires - prop.crop_area_alqueires - prop.confinement_area_alqueires
-        return max(remaining, 0.0)
+def resolve_pasture_ha(prop: PropertyNote) -> float:
+    # 1) Pastagem informada explicitamente ("55 hectares de pastagem").
+    if prop.pasture_area_ha:
+        return prop.pasture_area_ha
+    if prop.livestock_area_ha:
+        return prop.livestock_area_ha
+    # 2) Sem valor explicito: pastagem = area total menos lavoura/confinamento.
+    #    Sem lavoura declarada, toda a area vira pastagem (nao inventa cultivo).
+    if (prop.pastures or prop.livestock) and prop.area_ha is not None:
+        remaining = prop.area_ha - prop.crop_area_ha - prop.confinement_area_ha
+        return round(max(remaining, 0.0), 2)
     return 0.0
 
 
-def resolve_crop_alqueires(prop: PropertyNote) -> float:
+def resolve_crop_ha(prop: PropertyNote) -> float:
     # Cultivo so existe quando ha lavoura ou confinamento informados. Caso
     # contrario fica 0 (nunca uma fracao inventada da area total).
-    return prop.crop_area_alqueires + prop.confinement_area_alqueires
-
-
-def alqueires_to_hectares(value: float | None) -> float:
-    if not value:
-        return 0.0
-    return round(float(value) * ALQUEIRE_GOIANO_HA, 2)
+    return round(prop.crop_area_ha + prop.confinement_area_ha, 2)
 
 
 def property_activity(prop: PropertyNote) -> str:
@@ -671,7 +698,7 @@ def render_investments_section(notes: RawVisitNotes) -> str:
 
 
 def render_other_comments(notes: RawVisitNotes, activities: str, cultures: str) -> str:
-    total_area = sum(alqueires_to_hectares(prop.area_alqueires) for prop in notes.properties)
+    total_area = sum(float(prop.area_ha or 0.0) for prop in notes.properties)
     location = f" em {notes.location}" if notes.location else ""
     comments = [
         f"A exploração rural{location} apresenta perfil diversificado, com atuação em {activities.lower()}.",
@@ -698,7 +725,7 @@ def render_conclusion(notes: RawVisitNotes, activities: str) -> str:
 
 
 def render_direct_phrase(notes: RawVisitNotes, activities: str) -> str:
-    total_area = sum(alqueires_to_hectares(prop.area_alqueires) for prop in notes.properties)
+    total_area = sum(float(prop.area_ha or 0.0) for prop in notes.properties)
     return (
         f"OPERAÇÃO AGROPECUÁRIA COM {len(notes.properties)} UNIDADE(S) PRODUTIVA(S), "
         f"ÁREA TOTAL INFORMADA DE {format_pt_number(total_area)} HECTARES E ATUAÇÃO EM {activities.upper()}."
