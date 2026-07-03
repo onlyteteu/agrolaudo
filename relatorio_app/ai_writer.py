@@ -100,6 +100,13 @@ def generate_technical_report_auto(raw_text: str) -> WriterRun:
         structured, structured_source = resolve_structured_data(
             raw_text, report_text, parsed, api_key=api_key, model=model
         )
+        # Reforco do preenchimento: o JSON estruturado e otimo para fatos
+        # (areas, imoveis), mas costuma deixar VAZIAS as secoes de prosa
+        # (conclusao, outros comentarios, investimentos) e ate areas por
+        # propriedade, pois so extrai o que esta "nas anotacoes". O texto do
+        # laudo tem todas as secoes; usamos o structured como base e preenchemos
+        # apenas os buracos com o parser do texto, evitando celulas vazias.
+        structured = merge_structured_with_text(structured, parsed)
         return WriterRun(
             result=TechnicalReportResult(report_text=report_text, notes=local_result.notes, source=f"gemini:{model}"),
             used_ai=True,
@@ -136,6 +143,52 @@ def resolve_structured_data(
     except Exception:
         pass
     return regex_parsed, "regex"
+
+
+def merge_structured_with_text(structured: dict | None, text_parsed: dict | None) -> dict | None:
+    """Completa a extracao estruturada com os campos lidos do texto do laudo.
+
+    Usa ``structured`` (fatos da IA) como base e preenche SOMENTE os campos
+    vazios/ausentes com ``text_parsed`` (regex sobre o laudo). Nao sobrescreve
+    dado bom. Reduz drasticamente celulas em branco (conclusao, comentarios,
+    areas por propriedade) quando o JSON da IA vem incompleto."""
+    if not isinstance(structured, dict):
+        return text_parsed if isinstance(text_parsed, dict) else structured
+    if not isinstance(text_parsed, dict):
+        return structured
+
+    merged = dict(structured)
+    for key, value in text_parsed.items():
+        if key == "imoveis" or value in (None, ""):
+            continue
+        if merged.get(key) in (None, ""):
+            merged[key] = value
+
+    _merge_imoveis(merged, text_parsed.get("imoveis"))
+    merged["_structured"] = True
+    return merged
+
+
+def _merge_imoveis(merged: dict, text_imoveis: object) -> None:
+    """Preenche campos vazios de cada imovel (areas, atividade, culturas) a
+    partir da lista lida do texto, casando por posicao."""
+    if not isinstance(text_imoveis, list) or not text_imoveis:
+        return
+    base_imoveis = merged.get("imoveis")
+    if not isinstance(base_imoveis, list) or not base_imoveis:
+        merged["imoveis"] = text_imoveis
+        return
+    for index, item in enumerate(base_imoveis):
+        if not isinstance(item, dict) or index >= len(text_imoveis):
+            continue
+        source = text_imoveis[index]
+        if not isinstance(source, dict):
+            continue
+        for key, value in source.items():
+            if value in (None, ""):
+                continue
+            if item.get(key) in (None, ""):
+                item[key] = value
 
 
 def structured_is_sane(structured: dict) -> bool:
