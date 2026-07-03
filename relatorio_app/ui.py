@@ -1171,6 +1171,7 @@ def render_credit_report_page() -> str:
               </div>
 
               <input type="hidden" id="reviewData" name="review_data">
+              <input type="hidden" id="writerMeta" name="writer_meta">
               <textarea id="dados" name="dados" hidden></textarea>
             </div>
           </section>
@@ -1384,10 +1385,29 @@ def render_credit_report_page() -> str:
     technicalPreview.value = payload.report_text || '';
     setPreview(payload.report_text || '');
     renderFields(payload.review);
+    captureWriterMeta(payload);
     writerNotice.className = 'notice success show';
     writerNotice.textContent = 'Dados preparados. Gerando a planilha.';
     setStatus('Dados prontos');
     return payload;
+  }
+
+  // Indicador secreto: guarda qual motor gerou (Gemini x local), modelo, motivo
+  // do fallback e tamanho do texto. Vai junto ao gerar (grava nas propriedades
+  // do Excel) e pode ser consultado na hora pelo atalho Ctrl+Shift+G.
+  function captureWriterMeta(payload) {
+    const w = (payload && payload.writer) || {};
+    const meta = {
+      used_ai: !!w.used_ai,
+      provider: w.provider || (w.used_ai ? 'gemini' : 'local'),
+      model: w.model || '',
+      fallback_reason: w.fallback_reason || '',
+      chars: (payload && payload.report_text ? payload.report_text.length : 0)
+    };
+    window.__lastWriter = meta;
+    const input = document.getElementById('writerMeta');
+    if (input) input.value = JSON.stringify(meta);
+    return meta;
   }
 
   async function refreshFieldsFromTechnicalText() {
@@ -1629,6 +1649,39 @@ def render_credit_report_page() -> str:
     } finally {
       abortController = null;
       setAllBusy(false);
+    }
+  });
+
+  // Atalho secreto: Ctrl+Shift+G mostra qual motor gerou a ultima vez.
+  function showWriterToast() {
+    const meta = window.__lastWriter;
+    let msg;
+    if (!meta) {
+      msg = 'Nenhuma geracao ainda nesta sessao.';
+    } else if (meta.used_ai) {
+      msg = `✓ Gemini (${meta.model || 'gemini'}) · ${meta.chars} caracteres`;
+    } else {
+      msg = `⚠ Modo local (Gemini nao rodou) · ${meta.chars} caracteres`;
+      if (meta.fallback_reason) msg += ` · ${meta.fallback_reason}`;
+    }
+    let toast = document.getElementById('writerToast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'writerToast';
+      toast.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:60;max-width:90vw;padding:12px 16px;border-radius:12px;background:#06150e;color:#e9f7ea;font:600 13px/1.4 Inter,"Segoe UI",Arial,sans-serif;box-shadow:0 18px 40px rgba(0,0,0,.35);border:1px solid rgba(194,242,77,.35);opacity:0;transition:opacity .2s ease;pointer-events:none;text-align:center;';
+      document.body.appendChild(toast);
+    }
+    toast.style.color = meta && meta.used_ai ? '#c2f24d' : '#f0c27a';
+    toast.textContent = msg;
+    toast.style.opacity = '1';
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { toast.style.opacity = '0'; }, 6000);
+  }
+
+  document.addEventListener('keydown', (event) => {
+    if (event.ctrlKey && event.shiftKey && (event.key === 'G' || event.key === 'g')) {
+      event.preventDefault();
+      showWriterToast();
     }
   });
 </script>

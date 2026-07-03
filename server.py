@@ -83,10 +83,11 @@ class ReportHandler(BaseHTTPRequestHandler):
         data_text = form.getfirst("dados", "")
         review_data = parse_review_data(form.getfirst("review_data", ""), data_text)
         photos = save_uploaded_files(form, upload_dir, "photos")
+        writer_meta = parse_writer_meta(form.getfirst("writer_meta", ""))
         output_path = DEFAULT_OUTPUT_DIR / f"relatorio-{run_id}.xlsx"
 
         try:
-            generated = generate_report(review_data or data_text, photos, output_path)
+            generated = generate_report(review_data or data_text, photos, output_path, writer_meta=writer_meta)
         except Exception as exc:
             self.respond_html(render_error(str(exc)), status=500)
             return
@@ -337,6 +338,18 @@ def coerce_review_value(key: str, value):
     if key in NUMBER_FIELDS and value not in (None, ""):
         return parse_decimal_pt(value)
     return value
+
+
+def parse_writer_meta(raw: str) -> dict | None:
+    """Le o JSON com o status do motor (Gemini x local) enviado pelo front, para
+    gravar no Excel qual IA gerou o laudo. Tolerante a valores ausentes/invalidos."""
+    if not raw:
+        return None
+    try:
+        meta = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    return meta if isinstance(meta, dict) else None
 
 
 def render_error(message: str) -> str:

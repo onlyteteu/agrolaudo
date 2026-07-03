@@ -884,6 +884,7 @@ def generate_report(
     photo_paths: list[str | Path] | None = None,
     output_path: str | Path | None = None,
     template_path: str | Path = DEFAULT_TEMPLATE,
+    writer_meta: dict[str, Any] | None = None,
 ) -> Path:
     data = parse_report_data(data_source)
     template = Path(template_path)
@@ -922,8 +923,36 @@ def generate_report(
     adjust_dynamic_row_heights(worksheet)
     apply_photos(worksheet, photo_paths or [], output.parent / f"{output.stem}-images", below_benfeitoria_offset)
 
+    stamp_writer_metadata(workbook, writer_meta)
     workbook.save(output)
     return output
+
+
+def stamp_writer_metadata(workbook: Any, writer_meta: dict[str, Any] | None) -> None:
+    """Grava, de forma discreta, nas propriedades do arquivo Excel qual motor
+    gerou o laudo (Gemini x modo local), o modelo, o tamanho do texto e, em caso
+    de fallback, o motivo. Fica invisivel na planilha; so aparece em
+    Arquivo > Informacoes/Propriedades. Serve como "indicador secreto" para
+    conferir se a IA realmente rodou naquela geracao."""
+    if not isinstance(writer_meta, dict):
+        return
+    used_ai = bool(writer_meta.get("used_ai"))
+    provider = str(writer_meta.get("provider") or ("gemini" if used_ai else "local"))
+    model = str(writer_meta.get("model") or "")
+    chars = writer_meta.get("chars")
+    reason = str(writer_meta.get("fallback_reason") or "")
+
+    detalhe = f"motor={provider}"
+    if model:
+        detalhe += f":{model}"
+    if chars not in (None, ""):
+        detalhe += f" | caracteres={chars}"
+    if not used_ai and reason:
+        detalhe += f" | motivo={reason.strip()[:200]}"
+
+    props = workbook.properties
+    props.keywords = "IA=GEMINI" if used_ai else "IA=LOCAL"
+    props.description = detalhe
 
 
 def prepare_property_rows(worksheet: Worksheet, data: dict[str, Any]) -> int:
