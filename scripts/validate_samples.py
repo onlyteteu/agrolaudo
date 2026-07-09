@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from relatorio_app.pattern_library import build_writer_prompt, classify_case_tags, load_pattern_examples, select_pattern_examples
-from relatorio_app.report_engine import generate_report, infer_insumos, parse_decimal_pt, parse_report_data
+from relatorio_app.report_engine import format_cpf_cnpj, generate_report, infer_insumos, infer_perspectivas, parse_decimal_pt, parse_report_data
 from relatorio_app.technical_writer import generate_technical_report
 from server import parse_review_data
 
@@ -28,16 +28,16 @@ CASES = [
             "cidade_uf": "Cromínia-GO",
             "imovel_nome": "Sítio Pedro Rosa (Fazenda Santa Bárbara)",
             "area_total_ha": 53.24,
-            "area_pastagens_ha": 37.27,
-            "area_cultivo_ha": 15.97,
-            "atividade_principal": "Pecuária mista (Leite e Corte)",
-            "principais_culturas": "Pastagens forrageiras destinadas ao pastejo do rebanho leiteiro e de corte",
+            "area_pastagens_ha": 53.24,
+            "area_cultivo_ha": 0.0,
+            "atividade_principal": "Pecuária mista (leite e corte)",
+            "principais_culturas": "Pastagens",
         },
         "cells": {
             "A18": "SÍTIO PEDRO ROSA (FAZENDA SANTA BÁRBARA)",
             "D18": 53.24,
-            "E18": 37.27,
-            "F18": 15.97,
+            "E18": 53.24,
+            "F18": 0.0,
             "F27": "X",
             "A51": "Não informado",
             "G40": None,
@@ -255,6 +255,29 @@ Pastagem brachiarao
 """
 
 
+MARIA_FULL_TEXT = """
+Maria Aparecida Souza
+CPF 12345678901
+Data da visita: 05/07/2026
+Acesso: saindo de Rio Verde-GO pela GO-174, 12 km de estrada de chão até a porteira
+
+Fazenda Primavera, 10 alqueires
+30 vacas em lactação girolando
+20 novilhas - Recria
+Pastagem de tifton
+6 piquetes
+1 represa
+Sala de ordenha com resfriador
+
+Futuros projetos
+Reforma de pastagem
+Aquisição de gado
+
+Maquinarios:
+Trator Valtra A950
+"""
+
+
 def assert_equal(actual, expected, label: str) -> None:
     if isinstance(expected, float):
         if round(float(actual), 2) != round(expected, 2):
@@ -336,8 +359,10 @@ def main() -> None:
     luiz_output = generate_report(luiz_report, output_path=OUTPUT_DIR / "luiz-benfeitorias-curtas.xlsx")
     luiz_worksheet = load_workbook(luiz_output).active
     assert_equal(luiz_worksheet["A27"].value.startswith("Na Fazenda"), True, "luiz benfeitorias primeiro quadro")
-    assert_equal("Curral" in (luiz_worksheet["A30"].value or ""), True, "luiz benfeitorias segundo quadro")
-    assert_equal(luiz_worksheet["F30"].value, "X", "luiz conservacao segundo quadro")
+    # Propriedade unica = UM bloco denso (sem picotar): tudo no primeiro quadro.
+    assert_equal("curral" in (luiz_worksheet["A27"].value or "").lower(), True, "luiz curral no bloco unico")
+    assert_equal(luiz_worksheet["A30"].value, None, "luiz sem segundo quadro picotado")
+    assert_equal(luiz_worksheet["F27"].value, "X", "luiz conservacao bloco unico")
     # Pecuaria pura: cultivo 0 e pastagem = total (sem divisao 70/30 inventada).
     luiz_parsed = parse_report_data(luiz_report)
     assert_equal(luiz_parsed.get("area_cultivo_ha"), 0.0, "luiz cultivo zero (sem lavoura)")
@@ -347,6 +372,54 @@ def main() -> None:
     assert_equal(luiz_insumos.get("agua"), True, "luiz agua inferida do bebedouro")
     assert_equal(luiz_insumos.get("pastagens"), True, "luiz pastagens inferida do pasto")
     assert_equal(luiz_insumos.get("energia_eletrica"), None, "luiz sem energia (nao ha placa solar)")
+
+    # --- Extracao completa: data, acesso, CPF, leite, plantel e perspectivas ---
+    assert_equal(format_cpf_cnpj("12345678901"), "123.456.789-01", "cpf 11 digitos formatado")
+    assert_equal(format_cpf_cnpj("12345678000199"), "12.345.678/0001-99", "cnpj 14 digitos formatado")
+    assert_equal(format_cpf_cnpj("863.546.041-34"), "863.546.041-34", "cpf ja formatado preservado")
+
+    maria_result = generate_technical_report(MARIA_FULL_TEXT)
+    maria_notes = maria_result.notes
+    assert_equal(maria_notes.cpf_cnpj, "123.456.789-01", "maria cpf formatado nas notas")
+    assert_equal(maria_notes.visit_date, "05/07/2026", "maria data da visita extraida")
+    assert_equal("GO-174" in maria_notes.access, True, "maria vias de acesso extraidas")
+    assert_equal(maria_notes.location, "Rio Verde-GO", "maria municipio extraido do acesso")
+    assert_equal(maria_notes.total_head_count, 50, "maria plantel total somado")
+    assert_equal(len(maria_notes.properties), 1, "maria uma propriedade")
+    assert_equal(maria_notes.properties[0].area_ha, 48.4, "maria cabecalho com virgula (10 alqueires)")
+    assert_equal("Pecuária leiteira" in maria_result.report_text, True, "maria atividade leiteira detectada")
+    assert_equal("plantel total informado é de 50 cabeças" in maria_result.report_text, True, "maria frase do plantel")
+
+    maria_parsed = parse_report_data(maria_result.report_text)
+    assert_equal(maria_parsed.get("data_visita"), "05/07/2026", "maria data da visita no parse")
+    assert_equal("GO-174" in str(maria_parsed.get("comentario_localizacao")), True, "maria vias de acesso no parse")
+    assert_equal(maria_parsed.get("cpf_cnpj"), "123.456.789-01", "maria cpf no parse")
+    assert_equal(maria_parsed.get("rebanho"), "50 cabeças", "maria rebanho extraido da frase do plantel")
+
+    maria_perspectivas = infer_perspectivas(maria_parsed)
+    assert_equal(maria_perspectivas.get("reforma_de_pastagens"), True, "maria perspectiva reforma de pastagens")
+    assert_equal(maria_perspectivas.get("aquisicao_de_animais"), True, "maria perspectiva aquisicao de animais")
+    assert_equal(infer_perspectivas({"outros_comentarios": "Sem projetos futuros de reforma de pastagens."}), {}, "perspectiva negada nao marca")
+
+    maria_output = generate_report(maria_result.report_text, output_path=OUTPUT_DIR / "maria-extracao-completa.xlsx")
+    maria_worksheet = load_workbook(maria_output).active
+    assert_equal(maria_worksheet["J4"].value, "Data da Visita:05/07/2026", "maria data da visita na planilha")
+    assert_equal(maria_worksheet["B5"].value, "123.456.789-01", "maria cpf na planilha")
+    assert_equal("GO-174" in str(maria_worksheet["A12"].value), True, "maria vias de acesso na planilha (A12)")
+    assert_equal(maria_worksheet["F145"].value, "X", "maria perspectiva reforma de pastagens marcada (F145)")
+    assert_equal(maria_worksheet["F138"].value, "X", "maria perspectiva aquisicao de animais marcada (F138)")
+    assert_equal("perspectivas" in str(maria_worksheet["B147"].value).lower(), True, "maria comentario de perspectivas (B147)")
+
+    overflow_data = {
+        "cliente": "Produtor Teste",
+        "imoveis": [{"nome": "Fazenda Teste", "area_total_ha": 10.0}],
+        "equipamentos": [{"descricao": f"Trator {index:02d}"} for index in range(1, 30)],
+    }
+    overflow_output = generate_report(overflow_data, output_path=OUTPUT_DIR / "equipamentos-transbordo.xlsx")
+    overflow_worksheet = load_workbook(overflow_output).active
+    assert_equal(overflow_worksheet["A76"].value, "Trator 26", "ultimo equipamento visivel na tabela")
+    assert_equal("Demais itens declarados" in str(overflow_worksheet["M76"].value), True, "equipamentos excedentes resumidos")
+    assert_equal("Trator 29" in str(overflow_worksheet["M76"].value), True, "ultimo excedente citado no resumo")
 
     manual_text = (
         "Cliente: Maria Souza\n"
@@ -359,7 +432,10 @@ def main() -> None:
     assert_equal(manual_worksheet["A195"].value, "Data: 15/06/2026", "data assinatura preenchida")
     assert_equal(manual_worksheet["A204"].value, "Data: 15/06/2026", "data administracao preenchida")
     assert_equal(manual_worksheet["A207"].value, "DATA DA VISITA: 15/06/2026", "data rodape preenchida")
-    assert_equal(manual_worksheet["A51"].value, "Trator Massey Ferguson 4292", "maquinario primeira linha")
+    # Item com marca conhecida e dividido em descricao (A) / fabricante (E) / modelo (F).
+    assert_equal(manual_worksheet["A51"].value, "Trator", "maquinario primeira linha descricao")
+    assert_equal(manual_worksheet["E51"].value, "Massey Ferguson", "maquinario primeira linha fabricante")
+    assert_equal(manual_worksheet["F51"].value, "4292", "maquinario primeira linha modelo")
     assert_equal(manual_worksheet["A52"].value, "Grade aradora 16 discos", "maquinario segunda linha")
     assert_equal(manual_worksheet["A51"].alignment.horizontal, "left", "maquinario alinhado a esquerda")
 
@@ -386,7 +462,7 @@ def main() -> None:
     assert_equal(technical_parsed.get("area_total_ha"), 271.04, "texto tecnico area total")
     assert_equal(technical_parsed.get("area_pastagens_ha"), 188.76, "texto tecnico area pastagens")
     assert_equal(technical_parsed.get("area_cultivo_ha"), 82.28, "texto tecnico area cultivo")
-    assert_equal(technical_parsed.get("principais_culturas"), "Milho, Pastagens de Braquiarão", "texto tecnico culturas")
+    assert_equal(technical_parsed.get("principais_culturas"), "Milho, Pastagens de Braquiária", "texto tecnico culturas")
     assert_equal(len(technical_parsed.get("equipamentos", [])), 12, "texto tecnico equipamentos")
     technical_output = generate_report(technical_result.report_text, output_path=OUTPUT_DIR / "arnaldo-dados-brutos.xlsx")
     technical_worksheet = load_workbook(technical_output).active
@@ -394,9 +470,13 @@ def main() -> None:
     assert_equal(technical_worksheet["A18"].value, "FAZENDA SANTA RITA", "texto tecnico primeira propriedade excel")
     assert_equal(technical_worksheet["A21"].value, "FAZENDA ENGENHO DE SÃO BENEDITO", "texto tecnico quarta propriedade excel")
     assert_equal(technical_worksheet["D18"].value, 19.36, "texto tecnico area primeira propriedade excel")
-    assert_equal(technical_worksheet["A46"].value, None, "texto tecnico limpa equipamento antigo")
-    assert_equal(technical_worksheet["A51"].value, "Plantadeira Baldan 10 Linhas", "texto tecnico primeiro equipamento excel")
-    assert_equal(technical_worksheet["A54"].value, "Trator New Holland 7630", "texto tecnico quarto equipamento excel")
+    # 4 blocos de benfeitorias (4 propriedades) deslocam a tabela de maquinas em 3 linhas.
+    assert_equal(technical_worksheet["A51"].value, None, "texto tecnico limpa posicao antiga de equipamento")
+    assert_equal(technical_worksheet["A54"].value, "Plantadeira", "texto tecnico primeiro equipamento descricao")
+    assert_equal(technical_worksheet["E54"].value, "Baldan", "texto tecnico primeiro equipamento fabricante")
+    assert_equal(technical_worksheet["F54"].value, "10 Linhas", "texto tecnico primeiro equipamento modelo")
+    assert_equal(technical_worksheet["A57"].value, "Trator", "texto tecnico quarto equipamento descricao")
+    assert_equal(technical_worksheet["E57"].value, "New Holland", "texto tecnico quarto equipamento fabricante")
 
     examples = {example.id: example for example in load_pattern_examples()}
     assert_equal("arnaldo_melo_aprovado" in examples, True, "biblioteca contem arnaldo aprovado")

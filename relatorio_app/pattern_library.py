@@ -414,6 +414,8 @@ REGRAS INEGOCIAVEIS:
 - MANTENHA EXATAMENTE todos os numeros, nomes, areas, quantidades, culturas e fatos do rascunho. NUNCA altere valores nem unidades.
 - NAO invente nada que nao esteja no rascunho (nem benfeitorias, nem culturas, nem numeros, nem recursos).
 - Mantenha EXATAMENTE os mesmos titulos de secao do rascunho, na mesma ordem: 1. DISCRIMINACAO; 2. TIPO (Benfeitorias e Infraestrutura); 3. DESCRICAO (Maquinas, Equipamentos e Implementos); INVESTIMENTOS EM ANDAMENTO (Comentarios); OUTROS COMENTARIOS; CONCLUSAO; FRASES DIRETAS.
+- PRESERVE VERBATIM as linhas rotuladas da secao 1 (Cliente:, CPF/CNPJ:, Municipio/UF:, Data da visita:, Vias de acesso:, Nome da propriedade:, Tipo de exploracao:, Area Total (ha):, Area de Pastagens (ha):, Area de Cultivo (ha):, Atividade principal desenvolvida:, Principais culturas:) - o sistema le esses rotulos automaticamente para preencher a planilha. Nao renomeie, nao remova e nao funda essas linhas.
+- Se o rascunho contiver a frase do plantel ("O plantel total informado e de X cabecas"), mantenha-a com essa mesma redacao.
 - Desenvolva CADA secao com profundidade e linguagem tecnica de agronomo. A secao 2. TIPO deve ser a mais rica, em UM UNICO bloco denso por propriedade (comece com "Na Fazenda <nome>,"), sem picotar.
 - 'Denso' = rico em conteudo tecnico, nunca curto. Aproveite cada dado do rascunho.
 - Linguagem formal, objetiva e conservadora; sem adjetivos vazios ("excelente", "robusto", "altissimo") sem dado que sustente.

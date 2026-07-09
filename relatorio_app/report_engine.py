@@ -47,6 +47,11 @@ BENFEITORIA_BASE_BLOCKS = [(27, 29), (30, 31), (32, 33)]
 BENFEITORIA_INSERT_AT_ROW = 34
 BENFEITORIA_EXTRA_BLOCK_HEIGHT = 3
 BENFEITORIA_SIDE = Side(style="thin", color="000000")
+# Inicio de bloco de benfeitoria por propriedade ("Na Fazenda X," / "No Sítio Y,").
+BENFEITORIA_BLOCK_START = (
+    r"\b(?:Na|No)\s+(?:Fazenda|Unidade|Grupo|S[ií]tio|Ch[aá]cara|Est[aâ]ncia|"
+    r"Rancho|Gleba|Granja|Retiro|Lote|Im[oó]vel|Propriedade)\b"
+)
 CLIENT_NAME_WORD = r"[A-ZÀ-Ú][A-Za-zÀ-ÿ0-9&.'’-]+"
 CLIENT_NAME_PARTICLE = r"(?:d[aeo]s?|e)"
 CLIENT_NAME_PATTERN = rf"{CLIENT_NAME_WORD}(?:\s+(?:{CLIENT_NAME_PARTICLE}|{CLIENT_NAME_WORD})){{0,7}}"
@@ -113,6 +118,7 @@ def parse_narrative_report(text: str) -> dict[str, Any]:
         "cpf_cnpj": r"CPF/CNPJ|CNPJ/CPF|CPF|CNPJ",
         "cidade_uf": r"Município/UF|Municipio/UF|Município|Municipio|Cidade/UF|Cidade",
         "localizacao_1": r"Localização|Localizacao|Endereço/localização|Endereco/localizacao",
+        "comentario_localizacao": r"Vias?\s+de\s+acesso",
         "imovel_nome": r"Nome da propriedade|Nome das propriedades|Nomes das propriedades",
         "tipo_exploracao": r"Tipo de exploração|Tipo de exploracao",
         "atividades_desenvolvidas": r"Atividades desenvolvidas",
@@ -341,6 +347,19 @@ def parse_decimal_pt(value: Any) -> float | Any:
             number = integer + decimal
 
     return float(number)
+
+
+def format_cpf_cnpj(value: Any) -> str:
+    """Formata CPF (11 digitos) e CNPJ (14) no padrao com pontuacao.
+
+    Valores fora desses tamanhos voltam apenas limpos, sem alteracao."""
+    text = str(clean_text_value(value) or "")
+    digits = re.sub(r"\D", "", text)
+    if len(digits) == 11:
+        return f"{digits[0:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}"
+    if len(digits) == 14:
+        return f"{digits[0:2]}.{digits[2:5]}.{digits[5:8]}/{digits[8:12]}-{digits[12:]}"
+    return text
 
 
 def extract_city(text: str) -> str | None:
@@ -813,6 +832,9 @@ _EQUIPMENT_BRANDS = sorted(
         "Avaré", "Avare", "Jamil", "Honda", "Yamaha", "Volvo", "Scania", "Iveco",
         "Volkswagen", "Toyota", "Civemasa", "Piccin", "Montana", "Bernardi",
         "Lavrale", "Fella", "Krone", "Menta", "DMB", "JF", "VW",
+        "Chevrolet", "Vence Tudo", "Semeato", "Casale", "Kamaq", "Ipacol",
+        "Caterpillar", "Komatsu", "Hyundai", "JCB", "Jan", "Saci", "GTS",
+        "LS Tractor", "Landini", "Deutz", "Agritech", "Budny", "Mitsubishi",
     ],
     key=len,
     reverse=True,
@@ -865,6 +887,9 @@ def normalize_data(data: dict[str, Any]) -> dict[str, Any]:
             normalized["cliente"] = cleaned_client
         elif len(str(normalized["cliente"])) > 80:
             normalized.pop("cliente", None)
+
+    if normalized.get("cpf_cnpj"):
+        normalized["cpf_cnpj"] = format_cpf_cnpj(normalized["cpf_cnpj"])
 
     if normalized.get("data_visita"):
         normalized["data_visita"] = normalize_date_text(normalized["data_visita"])
@@ -941,6 +966,17 @@ def generate_report(
     benfeitoria_blocks = split_benfeitoria_blocks(data.get("benfeitorias_descricao"))
     benfeitoria_offset = prepare_benfeitoria_rows(worksheet, benfeitoria_blocks, row_offset)
     below_benfeitoria_offset = row_offset + benfeitoria_offset
+    # Perspectivas: mesma logica dos insumos (motor deterministico + refino da
+    # IA), marcando os "SIM" da secao de necessidades futuras e preenchendo o
+    # comentario quando ha declaracao explicita nas anotacoes.
+    perspectivas = infer_perspectivas(data)
+    ai_perspectivas = data.get("perspectivas")
+    if isinstance(ai_perspectivas, dict):
+        perspectivas.update(normalize_nested_dict(ai_perspectivas))
+    if perspectivas and not data.get("perspectivas_comentarios"):
+        comment = build_perspectivas_comment(perspectivas)
+        if comment:
+            data["perspectivas_comentarios"] = comment
     apply_fields(worksheet, data, row_offset, below_benfeitoria_offset)
     apply_benfeitoria_blocks(worksheet, data, benfeitoria_blocks, row_offset)
     apply_property_rows(worksheet, data)
@@ -955,7 +991,7 @@ def generate_report(
     if isinstance(ai_insumos, dict):
         insumos.update(ai_insumos)
     apply_insumos(worksheet, insumos, below_benfeitoria_offset)
-    apply_perspectivas(worksheet, data.get("perspectivas", {}), below_benfeitoria_offset)
+    apply_perspectivas(worksheet, perspectivas, below_benfeitoria_offset)
     polish_written_ranges(worksheet, row_offset, below_benfeitoria_offset)
     adjust_dynamic_row_heights(worksheet)
     apply_photos(worksheet, photo_paths or [], output.parent / f"{output.stem}-images", below_benfeitoria_offset)
@@ -1016,8 +1052,7 @@ def split_benfeitoria_blocks(value: Any) -> list[str]:
     if not text:
         return []
 
-    start_pattern = r"\b(?:Na|No)\s+(?:Fazenda|Unidade|Grupo|S[ií]tio|Ch[aá]cara)\b"
-    matches = list(re.finditer(start_pattern, text))
+    matches = list(re.finditer(BENFEITORIA_BLOCK_START, text))
     if not matches:
         return split_single_benfeitoria_block(text)
 
@@ -1047,8 +1082,7 @@ def split_benfeitorias_property_scope(value: Any) -> tuple[str, str | None]:
     if not text:
         return "", None
 
-    start_pattern = r"\b(?:Na|No)\s+(?:Fazenda|Unidade|Grupo|S[iÃ­]tio|Ch[aÃ¡]cara)\b"
-    matches = list(re.finditer(start_pattern, text))
+    matches = list(re.finditer(BENFEITORIA_BLOCK_START, text))
     if not matches:
         return text, None
 
@@ -1409,11 +1443,20 @@ def apply_equipment(worksheet: Worksheet, equipment: Any, row_offset: int = 0) -
     if not isinstance(equipment, list):
         return
 
-    for index, item in enumerate(equipment[: EQUIPMENT_END_ROW - EQUIPMENT_START_ROW + 1]):
-        if not isinstance(item, dict):
-            continue
+    capacity = EQUIPMENT_END_ROW - EQUIPMENT_START_ROW + 1
+    visible = [item for item in equipment if isinstance(item, dict)]
+    overflow = visible[capacity:]
+    for index, item in enumerate(visible[:capacity]):
         row = shifted_row(EQUIPMENT_START_ROW + index, row_offset)
         normalized_item = normalize_nested_dict(item)
+        # Itens alem da capacidade da tabela nao sao descartados em silencio:
+        # entram resumidos em "outras informacoes" da ultima linha.
+        if overflow and index == capacity - 1:
+            extras = "; ".join(str(extra.get("descricao", "")).strip() for extra in overflow if extra.get("descricao"))
+            if extras:
+                note = f"Demais itens declarados: {extras}"
+                existing = str(normalized_item.get("outras_informacoes") or "").strip()
+                normalized_item["outras_informacoes"] = f"{existing} | {note}" if existing else note
         for field, col in EQUIPMENT_COLUMNS.items():
             value = normalized_item.get(field)
             if value not in (None, ""):
@@ -1522,6 +1565,13 @@ def _gather_evidence_text(data: dict[str, Any]) -> str:
     for item in (data.get("imoveis") or []):
         if isinstance(item, dict):
             parts.extend(str(item.get(key, "")) for key in ("atividade_principal", "principais_culturas", "nome"))
+    equipment = data.get("equipamentos")
+    if isinstance(equipment, list):
+        for item in equipment:
+            if isinstance(item, dict):
+                parts.append(str(item.get("descricao", "")))
+            elif isinstance(item, str):
+                parts.append(item)
     return normalize_key(_drop_negated_clauses(" ".join(parts)))
 
 
@@ -1537,6 +1587,67 @@ def _drop_negated_clauses(text: str) -> str:
         if not negation.search(clause):
             kept.append(clause)
     return " ".join(kept)
+
+
+# Topicos de perspectivas/necessidades futuras: cada entrada casa quando TODOS
+# os grupos de termos aparecem na mesma frase (grupo = qualquer um dos termos).
+_PERSPECTIVA_TOPICS: dict[str, tuple[tuple[str, ...], ...]] = {
+    "reforma_de_pastagens": (("reforma", "recuperacao"), ("pastag", "pasto")),
+    "aquisicao_de_animais": (("aquisicao", "compra"), ("animal", "animais", "gado", "matriz", "bezerr", "novilh", "vaca", "boi", "cabecas")),
+    "aquisicao_de_maquinas_e_equipamentos": (("aquisicao", "compra"), ("maquina", "equipamento", "trator", "implemento", "caminhao")),
+    "aquisicao_antecipada_de_insumos": (("aquisicao", "compra"), ("insumo",)),
+    "correcao_de_solos": (("correcao", "calagem", "gessagem"), ("solo", "calagem", "gessagem")),
+    "incremento_da_area_cultivada": (("ampliacao", "incremento", "expansao", "aumento"), ("area",), ("cultiv", "plant", "lavoura")),
+    "implantacao_de_novas_culturas": (("nova", "novas"), ("cultura", "culturas")),
+    "implementacao_de_sistemas_de_armazenagem_irrigacao": (("irrigacao", "armazenagem", "silo", "pivo"),),
+    "construcao_reforma_ou_ampliacao_de_benfeitorias_e_instalacoes": (("construcao", "reforma", "ampliacao"), ("benfeitoria", "curral", "galpao", "cerca", "barracao", "instalac")),
+}
+
+_PERSPECTIVA_LABELS = {
+    "reforma_de_pastagens": "reforma de pastagens",
+    "aquisicao_de_animais": "aquisição de animais",
+    "aquisicao_de_maquinas_e_equipamentos": "aquisição de máquinas e equipamentos",
+    "aquisicao_antecipada_de_insumos": "aquisição antecipada de insumos",
+    "correcao_de_solos": "correção de solos",
+    "incremento_da_area_cultivada": "incremento da área cultivada",
+    "implantacao_de_novas_culturas": "implantação de novas culturas",
+    "implementacao_de_sistemas_de_armazenagem_irrigacao": "implementação de sistemas de armazenagem/irrigação",
+    "construcao_reforma_ou_ampliacao_de_benfeitorias_e_instalacoes": "construção, reforma ou ampliação de benfeitorias",
+}
+
+_PERSPECTIVA_INTENT_RE = re.compile(r"\b(?:projet\w*|pretend\w*|planej\w*|previs\w*|futur\w*|necessidad\w*|meta[s]?)\b", re.IGNORECASE)
+
+
+def infer_perspectivas(data: dict[str, Any]) -> dict[str, bool]:
+    """Marca perspectivas/necessidades futuras SOMENTE com declaracao explicita.
+
+    Exige, na mesma frase, um marcador de intencao (projeto, pretende, planeja,
+    futuro, necessidade) e os termos do topico. Frases negadas sao ignoradas."""
+    parts = [
+        str(data.get(field) or "")
+        for field in ("investimentos_comentarios", "outros_comentarios", "perspectivas_comentarios", "raw_text")
+    ]
+    text = " ".join(part for part in parts if part)
+    if not text.strip():
+        return {}
+
+    marks: dict[str, bool] = {}
+    negation = re.compile(r"\b(?:n[aã]o|sem|inexist\w*|aus[eê]nc\w*)\b", re.IGNORECASE)
+    for clause in re.split(r"[.;\n]", text):
+        if not clause.strip() or negation.search(clause) or not _PERSPECTIVA_INTENT_RE.search(clause):
+            continue
+        normalized = normalize_key(clause)
+        for key, term_groups in _PERSPECTIVA_TOPICS.items():
+            if all(any(term in normalized for term in group) for group in term_groups):
+                marks[key] = True
+    return marks
+
+
+def build_perspectivas_comment(marks: dict[str, Any]) -> str | None:
+    labels = [_PERSPECTIVA_LABELS[key] for key in _PERSPECTIVA_LABELS if marks.get(key)]
+    if not labels:
+        return None
+    return "Foram declaradas perspectivas de " + ", ".join(labels) + ", conforme informado na vistoria."
 
 
 def apply_insumos(worksheet: Worksheet, insumos: Any, row_offset: int = 0) -> None:

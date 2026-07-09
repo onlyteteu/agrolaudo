@@ -4,9 +4,14 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from .report_engine import clean_text_value, normalize_key, parse_decimal_pt
+from .report_engine import clean_text_value, format_cpf_cnpj, normalize_key, parse_decimal_pt
 
 ALQUEIRE_GOIANO_HA = 4.84
+
+_MONTH_NAMES = {
+    "janeiro": 1, "fevereiro": 2, "marco": 3, "abril": 4, "maio": 5, "junho": 6,
+    "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12,
+}
 
 
 @dataclass
@@ -21,6 +26,7 @@ class PropertyNote:
     livestock_area_ha: float = 0.0
     confinement_area_ha: float = 0.0
     pasture_area_ha: float = 0.0
+    head_count: int = 0
     phases: list[str] = field(default_factory=list)
     pastures: list[str] = field(default_factory=list)
     improvements: list[str] = field(default_factory=list)
@@ -33,8 +39,15 @@ class RawVisitNotes:
     client: str = ""
     cpf_cnpj: str = ""
     location: str = ""
+    visit_date: str = ""
+    access: str = ""
+    mentions_alqueires: bool = False
     properties: list[PropertyNote] = field(default_factory=list)
     equipment: list[str] = field(default_factory=list)
+
+    @property
+    def total_head_count(self) -> int:
+        return sum(prop.head_count for prop in self.properties)
 
 
 @dataclass
@@ -72,6 +85,25 @@ def parse_raw_visit_notes(raw_text: str) -> RawVisitNotes:
             continue
 
         normalized = normalize_key(line)
+        if _ALQUEIRE_HINT_RE.search(line):
+            notes.mentions_alqueires = True
+
+        if not notes.visit_date:
+            visit_date = parse_visit_date_line(line)
+            if visit_date:
+                notes.visit_date = visit_date
+                continue
+
+        if not notes.access:
+            access = parse_access_line(line)
+            if access:
+                notes.access = access
+                if not notes.location:
+                    city = extract_city_from_access(access)
+                    if city:
+                        notes.location = city
+                continue
+
         if is_equipment_heading(normalized):
             in_equipment = True
             current_property = None
@@ -88,15 +120,18 @@ def parse_raw_visit_notes(raw_text: str) -> RawVisitNotes:
             notes.equipment.append(normalize_equipment(line))
             continue
 
-        rented = parse_rented_area_line(line)
-        if rented:
-            current_property = PropertyNote(**rented)
-            notes.properties.append(current_property)
-            continue
-
+        # Cabecalho de propriedade tem prioridade sobre a regra de area
+        # arrendada: "Fazenda Morro Grande - 30 alqueires (arrendada)" deve
+        # manter o nome da fazenda (com o status), nao virar rotulo generico.
         header = parse_property_header(line)
         if header:
             current_property = PropertyNote(**header)
+            notes.properties.append(current_property)
+            continue
+
+        rented = parse_rented_area_line(line)
+        if rented:
+            current_property = PropertyNote(**rented)
             notes.properties.append(current_property)
             continue
 
@@ -121,7 +156,7 @@ def parse_raw_visit_notes(raw_text: str) -> RawVisitNotes:
             continue
 
         if re.search(r"\b(?:CPF|CNPJ)\b", line, flags=re.IGNORECASE):
-            notes.cpf_cnpj = extract_labeled_value(line)
+            notes.cpf_cnpj = format_cpf_cnpj(extract_labeled_value(line))
             continue
 
         if not notes.location and looks_like_location(line):
@@ -134,6 +169,56 @@ def clean_line(value: str) -> str:
     line = str(value or "").strip()
     line = re.sub(r"\s+", " ", line)
     return line.strip(" -")
+
+
+_ALQUEIRE_HINT_RE = re.compile(r"\b(?:alqueires?|aqueires?|alq\.?)\b", re.IGNORECASE)
+_NUMERIC_DATE_RE = r"\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}"
+
+
+def parse_visit_date_line(line: str) -> str | None:
+    """Extrai a data da visita das anotacoes brutas.
+
+    Aceita rotulos ('Data da visita: 05/07/2026', 'Visita em 05/07/2026'),
+    linhas que sao apenas a data e datas por extenso ('5 de julho de 2026').
+    """
+    labeled = re.search(
+        rf"(?:data\s+d[ae]\s+visita|visita(?:\s+(?:realizada|efetuada|feita))?\s+(?:em|dia|no\s+dia)|data)\s*[:\-]?\s*({_NUMERIC_DATE_RE})",
+        line,
+        flags=re.IGNORECASE,
+    )
+    if labeled:
+        return labeled.group(1)
+
+    if re.fullmatch(_NUMERIC_DATE_RE, line.strip()):
+        return line.strip()
+
+    textual = re.search(
+        r"(?:data\s+d[ae]\s+visita|visita(?:\s+(?:realizada|efetuada|feita))?|data)\s*[:\-]?\s*(?:em\s+|no\s+dia\s+|dia\s+)?(\d{1,2})\s+de\s+([a-zçã]+)\s+de\s+(\d{4})",
+        line,
+        flags=re.IGNORECASE,
+    )
+    if textual:
+        month = _MONTH_NAMES.get(normalize_key(textual.group(2)))
+        if month:
+            return f"{int(textual.group(1)):02d}/{month:02d}/{textual.group(3)}"
+    return None
+
+
+def parse_access_line(line: str) -> str | None:
+    match = re.match(
+        r"^(?:vias?\s+de\s+acesso|acesso|como\s+chegar|rota|trajeto)\s*[:\-]\s*(.+)$",
+        line,
+        flags=re.IGNORECASE,
+    )
+    return clean_text_value(match.group(1)) if match else None
+
+
+def extract_city_from_access(access: str) -> str | None:
+    match = re.search(
+        r"(?:saindo|partindo|a\s+partir)\s+de\s+([A-ZÀ-Ú][A-Za-zÀ-ÿ'\s]*?\s*-\s*[A-Z]{2})\b",
+        access,
+    )
+    return clean_text_value(match.group(1)) if match else None
 
 
 def is_equipment_heading(normalized: str) -> bool:
@@ -171,7 +256,9 @@ def is_machine_line(normalized: str) -> bool:
 
 def parse_property_header(line: str) -> dict[str, Any] | None:
     match = re.match(
-        r"^(?P<name>(?:Fazenda|S[ií]tio|Sitio|Ch[aá]cara|Chacara|Est[aâ]ncia|Estancia|Rancho|Gleba|Granja|Retiro|Lote|Im[oó]vel|Propriedade)\b.+?)\s*[-–]\s*(?P<area>\d+(?:[,.]\d+)?)\s*(?P<unit>alqueires?|aqueires?|hectares?|ha)\b(?P<tail>.*)$",
+        r"^(?P<name>(?:Fazenda|S[ií]tio|Sitio|Ch[aá]cara|Chacara|Est[aâ]ncia|Estancia|Rancho|Gleba|Granja|Retiro|Lote|Im[oó]vel|Propriedade)\b.+?)"
+        r"\s*(?:[-–—,(]|\bcom\b|\bde\b)\s*"
+        r"(?P<area>\d+(?:[,.]\d+)?)\s*(?P<unit>alqueires?|aqueires?|alq\.?|hectares?|ha)\b\)?(?P<tail>.*)$",
         line,
         flags=re.IGNORECASE,
     )
@@ -203,7 +290,7 @@ def parse_property_name_line(line: str) -> str | None:
 
 def parse_standalone_area(line: str) -> float | None:
     match = re.match(
-        r"^(?:aprox(?:imadamente)?\s*)?(\d+(?:[,.]\d+)?)\s*(alqueires?|aqueires?|hectares?|ha)$",
+        r"^(?:aprox(?:imadamente)?\.?\s*|area\s+(?:total\s+)?(?:de\s+)?)?(\d+(?:[,.]\d+)?)\s*(alqueires?|aqueires?|alq\.?|hectares?|ha)$",
         line,
         flags=re.IGNORECASE,
     )
@@ -269,10 +356,12 @@ def classify_property_line(property_note: PropertyNote, line: str) -> None:
         if area:
             property_note.confinement_area_ha += area
         property_note.livestock.append(line)
+        property_note.head_count += extract_head_count(line)
         return
 
     if is_livestock_line(normalized):
         property_note.livestock.append(line)
+        property_note.head_count += extract_head_count(line)
         phase = extract_phase_from_line(line)
         if phase:
             add_unique(property_note.phases, phase)
@@ -299,7 +388,9 @@ def classify_property_line(property_note: PropertyNote, line: str) -> None:
             add_unique(property_note.pastures, label)
         return
 
-    if is_improvement_line(normalized):
+    # Linhas longas sao narrativa (comentario), nao item de infraestrutura,
+    # mesmo citando "casa"/"tanque" etc.
+    if len(line) <= 90 and is_improvement_line(normalized):
         property_note.improvements.append(normalize_improvement(line))
         return
 
@@ -310,7 +401,7 @@ def classify_property_line(property_note: PropertyNote, line: str) -> None:
     property_note.comments.append(line)
 
 
-_AREA_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(alqueires?|aqueires?|hectares?|ha)\b", re.IGNORECASE)
+_AREA_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(alqueires?|aqueires?|alq\.?|hectares?|ha)\b", re.IGNORECASE)
 
 
 def _to_hectares(value_text: str, unit: str) -> float | None:
@@ -343,27 +434,59 @@ def extract_phase_from_line(line: str) -> str:
     return ""
 
 
+_LIVESTOCK_TERMS = {
+    "cabeca", "cabecas", "gado", "nelore", "angus", "brangus", "senepol",
+    "tabapua", "guzera", "girolando", "res", "reis", "reses", "rebanho",
+    "plantel", "garrote", "garrotes", "novilha", "novilhas", "novilho",
+    "novilhos", "vaca", "vacas", "bezerro", "bezerros", "bezerra", "bezerras",
+    "boi", "bois", "touro", "touros", "matriz", "matrizes", "bovino",
+    "bovinos", "bufalo", "bufalos", "ovelha", "ovelhas", "ovino", "ovinos",
+    "caprino", "caprinos", "cabra", "cabras", "suino", "suinos", "porco",
+    "porcos", "leitao", "leitoes", "frango", "frangos", "galinha", "galinhas",
+    "aves", "equino", "equinos", "cavalo", "cavalos",
+}
+
+_HEAD_COUNT_RE = re.compile(
+    r"(\d+)_(?:cabecas?|cab|vacas?|bois?|boi|novilhas?|novilhos?|garrotes?|"
+    r"bezerr\w+|touros?|matrizes|matriz|reses|animais|bovin\w+|bufal\w+|"
+    r"ovelhas?|ovinos?|caprinos?|cabras?|suinos?|porcos?|leit(?:ao|oes)|"
+    r"frangos?|galinhas?|aves|vitel\w+)(?:_|$)"
+)
+
+_MEASURE_UNIT_RE = re.compile(r"(?:^|_)(?:alqueires?|aqueires?|alq|hectares?|ha|litros?|metros?|kg|quilos?|arrobas?|toneladas?|sacas?|caixas?)(?:_|$)")
+
+
 def is_livestock_line(normalized: str) -> bool:
-    livestock_terms = {
-        "cabeca",
-        "cabecas",
-        "gado",
-        "nelore",
-        "res",
-        "reis",
-        "reses",
-        "garrote",
-        "garrotes",
-        "novilha",
-        "novilhas",
-        "vaca",
-        "vacas",
-        "bezerro",
-        "bezerros",
-        "boi",
-        "bois",
-    }
-    return any(term in normalized.split("_") for term in livestock_terms)
+    return any(term in normalized.split("_") for term in _LIVESTOCK_TERMS)
+
+
+def extract_head_count(line: str) -> int:
+    """Soma as cabecas declaradas na linha ('49 vacas e 2 bois' -> 51).
+
+    Sem substantivo de rebanho apos o numero, aceita um numero solto no fim da
+    linha ('Gado de corte nelore - 130' -> 130), desde que nao seja medida."""
+    normalized = normalize_key(line)
+    total = sum(int(value) for value in _HEAD_COUNT_RE.findall(normalized))
+    if total:
+        return total
+    tail = re.search(r"_(\d{1,6})$", normalized)
+    if tail and not _MEASURE_UNIT_RE.search(normalized):
+        return int(tail.group(1))
+    return 0
+
+
+_DAIRY_TERMS = {"leite", "leiteira", "leiteiro", "lactacao", "ordenha", "girolando", "holandes", "holandesa", "jersey"}
+_BEEF_TERMS = {"corte", "nelore", "angus", "brangus", "senepol", "tabapua", "guzera", "confinamento", "engorda", "terminacao"}
+
+
+def property_livestock_profile(prop: PropertyNote) -> tuple[bool, bool]:
+    """Devolve (leite, corte) conforme os termos declarados na propriedade."""
+    tokens: set[str] = set()
+    for line in prop.lines + prop.livestock + prop.comments:
+        tokens.update(normalize_key(line).split("_"))
+    dairy = bool(tokens & _DAIRY_TERMS)
+    beef = bool(tokens & _BEEF_TERMS)
+    return dairy, beef
 
 
 def is_fish_line(normalized: str) -> bool:
@@ -371,42 +494,86 @@ def is_fish_line(normalized: str) -> bool:
 
 
 def is_future_project_line(normalized: str) -> bool:
-    return any(term in normalized for term in ("reforma_de_pastagem", "reforma_pastagem", "aquisicao_de_gado", "aquisicao_animais"))
+    if any(term in normalized for term in ("reforma_de_pastagem", "reforma_pastagem", "reforma_de_cerca", "reforma_cerca", "correcao_de_solo")):
+        return True
+    return normalized.startswith(("aquisicao", "compra_de", "construcao_de", "ampliacao_de"))
 
 
 def is_pasture_line(normalized: str) -> bool:
-    return any(term in normalized for term in ("pastagem", "patagem", "andropogon", "quicuia", "brachiarao", "braquiarao", "brach"))
+    if any(term in normalized for term in (
+        "pastagem", "patagem", "pasto_", "andropogon", "quicuia", "brachiarao",
+        "braquiarao", "brach", "braqui", "mombaca", "marandu", "panicum",
+        "tifton", "humidicola", "decumbens", "capim",
+    )):
+        return True
+    return "pasto" in normalized.split("_")
+
+
+# Culturas reconhecidas por token (singular/plural), na ordem de exibicao.
+_CROP_LABELS: list[tuple[tuple[str, ...], str]] = [
+    (("milho",), "Milho"),
+    (("mandioca",), "Mandioca"),
+    (("soja",), "Soja"),
+    (("sorgo",), "Sorgo"),
+    (("feijao",), "Feijão"),
+    (("cana",), "Cana-de-açúcar"),
+    (("cafe",), "Café"),
+    (("arroz",), "Arroz"),
+    (("algodao",), "Algodão"),
+    (("girassol",), "Girassol"),
+    (("amendoim",), "Amendoim"),
+    (("trigo",), "Trigo"),
+    (("aveia",), "Aveia"),
+    (("milheto",), "Milheto"),
+    (("banana", "bananal"), "Banana"),
+    (("laranja", "citros", "citrus"), "Citros"),
+    (("eucalipto",), "Eucalipto"),
+    (("seringueira",), "Seringueira"),
+    (("tomate",), "Tomate"),
+    (("batata",), "Batata"),
+    (("abobora",), "Abóbora"),
+    (("melancia",), "Melancia"),
+    (("maracuja",), "Maracujá"),
+    (("alho",), "Alho"),
+    (("cebola",), "Cebola"),
+    (("abacaxi",), "Abacaxi"),
+    (("mamao",), "Mamão"),
+    (("manga",), "Manga"),
+    (("uva",), "Uva"),
+    (("hortalica", "hortalicas", "horta"), "Hortaliças"),
+]
+
+_CROP_CONTEXT_TOKENS = {"lavoura", "lavouras", "cultivo", "cultura", "culturas", "plantio", "plantacao", "safra", "roca"}
+_CROP_TOKENS = {token for tokens, _ in _CROP_LABELS for token in tokens} | {f"{token}s" for tokens, _ in _CROP_LABELS for token in tokens}
 
 
 def is_crop_line(normalized: str) -> bool:
-    return any(term in normalized for term in ("lavoura", "cultivo", "milho", "soja", "mandioca", "sorgo"))
+    tokens = set(normalized.split("_"))
+    return bool(tokens & (_CROP_CONTEXT_TOKENS | _CROP_TOKENS))
+
+
+# Termos de benfeitoria: casados por substring (compostos/derivados) ou por
+# token exato (palavras curtas que gerariam falso positivo por substring).
+_IMPROVEMENT_SUBSTRINGS = (
+    "placa", "solar", "fotovolta", "fabrica", "racao", "trincheira", "silo",
+    "curral", "galpao", "armazem", "armazenagem", "barracao", "casa",
+    "energia", "poco", "artesiano", "represa", "tanque", "piquete", "cocho",
+    "bebedouro", "corrego", "cerca", "mangueira", "estabulo", "ordenha",
+    "aprisco", "pocilga", "chiqueiro", "aviario", "estufa", "irrigacao",
+    "alojamento", "esterqueira", "biodigestor", "embarcadouro", "embarcador",
+    "resfriador", "cisterna", "escritorio", "refeitorio", "balanca",
+    "nascente", "acude", "reservatorio", "caixa_d",
+)
+_IMPROVEMENT_TOKENS = {"brete", "tronco", "sede", "pivo", "rio", "barraco"}
 
 
 def is_improvement_line(normalized: str) -> bool:
-    terms = (
-        "placa",
-        "solar",
-        "fabrica",
-        "racao",
-        "trincheira",
-        "silo",
-        "curral",
-        "galpao",
-        "armazem",
-        "armazenagem",
-        "barracao",
-        "casa",
-        "energia",
-        "poco",
-        "artesiano",
-        "represa",
-        "tanque",
-        "piquete",
-        "cocho",
-        "bebedouro",
-        "corrego",
-    )
-    return any(term in normalized for term in terms)
+    # "cerca de 30 ..." e aproximacao numerica, nao benfeitoria.
+    if re.match(r"^cerca_de_\d", normalized):
+        return False
+    if any(term in normalized for term in _IMPROVEMENT_SUBSTRINGS):
+        return True
+    return bool(set(normalized.split("_")) & _IMPROVEMENT_TOKENS)
 
 
 def add_unique(values: list[str], value: str) -> None:
@@ -430,6 +597,12 @@ def pasture_grass_label(line: str) -> str:
         grasses.append("Panicum")
     if "marandu" in normalized:
         grasses.append("Marandu")
+    if "tifton" in normalized:
+        grasses.append("Tifton")
+    if "humidicola" in normalized:
+        grasses.append("Humidícola")
+    if "decumbens" in normalized:
+        grasses.append("Decumbens")
     if "brach" in normalized or "bracg" in normalized or "braqui" in normalized or "brizanth" in normalized:
         grasses.append("Braquiária")
     seen: set[str] = set()
@@ -462,9 +635,17 @@ def normalize_future_project(line: str) -> str:
     normalized = normalize_key(line)
     if "reforma" in normalized and "pastagem" in normalized:
         return "reforma de pastagens"
-    if "aquisicao" in normalized and ("gado" in normalized or "animais" in normalized):
+    if "reforma" in normalized and "cerca" in normalized:
+        return "reforma de cercas"
+    if "correcao" in normalized and "solo" in normalized:
+        return "correção de solos"
+    animal_terms = ("gado", "animais", "matriz", "matrizes", "bezerro", "bezerros", "novilha", "novilhas", "vacas")
+    if ("aquisicao" in normalized or "compra" in normalized) and any(term in normalized for term in animal_terms):
         return "aquisição de animais"
-    return line
+    machine_terms = ("maquina", "maquinas", "trator", "equipamento", "equipamentos", "implemento", "implementos", "caminhao")
+    if ("aquisicao" in normalized or "compra" in normalized) and any(term in normalized for term in machine_terms):
+        return "aquisição de máquinas e equipamentos"
+    return lower_first(line)
 
 
 def normalize_equipment(line: str) -> str:
@@ -529,6 +710,10 @@ def render_technical_report(notes: RawVisitNotes) -> str:
         sections.append(f"CPF/CNPJ: {notes.cpf_cnpj}")
     if notes.location:
         sections.append(f"Município/UF: {notes.location}")
+    if notes.visit_date:
+        sections.append(f"Data da visita: {notes.visit_date}")
+    if notes.access:
+        sections.append(f"Vias de acesso: {notes.access}")
     sections.extend(
         [
             f"Nome da propriedade: {property_names}",
@@ -603,7 +788,12 @@ def resolve_crop_ha(prop: PropertyNote) -> float:
 def property_activity(prop: PropertyNote) -> str:
     parts: list[str] = []
     if prop.livestock:
-        if "Confinamento" in prop.phases:
+        dairy, beef = property_livestock_profile(prop)
+        if dairy and beef:
+            parts.append("Pecuária mista (Leite e Corte)")
+        elif dairy:
+            parts.append("Pecuária leiteira")
+        elif "Confinamento" in prop.phases:
             parts.append("Pecuária de corte em confinamento")
         elif prop.phases:
             parts.append(f"Pecuária de corte ({', '.join(prop.phases)})")
@@ -632,15 +822,11 @@ def property_cultures(prop: PropertyNote) -> str:
 def extract_crop_names(lines: list[str]) -> list[str]:
     crops: list[str] = []
     for line in lines:
-        normalized = normalize_key(line)
-        if "milho" in normalized:
-            add_unique(crops, "Milho")
-        elif "mandioca" in normalized:
-            add_unique(crops, "Mandioca")
-        elif "soja" in normalized:
-            add_unique(crops, "Soja")
-        elif "sorgo" in normalized:
-            add_unique(crops, "Sorgo")
+        tokens = set(normalize_key(line).split("_"))
+        for crop_tokens, label in _CROP_LABELS:
+            candidates = set(crop_tokens) | {f"{token}s" for token in crop_tokens}
+            if tokens & candidates:
+                add_unique(crops, label)
     return crops
 
 
@@ -672,24 +858,77 @@ def summarize_cultures(properties: list[PropertyNote]) -> str:
     return ", ".join(values) if values else "Não informado"
 
 
+def property_block_opener(name: str) -> str:
+    """Prefixo 'Na/No <propriedade>' com a preposicao correta pelo tipo."""
+    masculine = re.match(r"\s*(S[ií]tio|Sitio|Rancho|Retiro|Lote|Im[oó]vel)\b", name, flags=re.IGNORECASE)
+    return f"No {name}" if masculine else f"Na {name}"
+
+
+def lower_first(value: str) -> str:
+    text = clean_text_value(value)
+    if not text or text[0].isdigit():
+        return text
+    return text[0].lower() + text[1:]
+
+
 def render_improvements_section(notes: RawVisitNotes) -> str:
     paragraphs: list[str] = []
     for prop in notes.properties:
-        details = []
+        sentences: list[str] = []
+
         if prop.improvements:
-            details.append(join_human(prop.improvements))
+            items = join_human([lower_first(item) for item in prop.improvements])
+            sentences.append(f"a infraestrutura declarada compreende {items}")
+
         if prop.livestock:
-            details.append(f"atividade pecuária informada com {summarize_livestock(prop)}")
+            livestock_text = summarize_livestock(prop)
+            details: list[str] = []
+            if "Confinamento" in prop.phases:
+                confinement = "manejo em regime de confinamento"
+                if prop.confinement_area_ha:
+                    confinement += f" em área de {format_pt_number(prop.confinement_area_ha)} ha"
+                details.append(confinement)
+            other_phases = [phase for phase in prop.phases if phase != "Confinamento"]
+            if other_phases:
+                details.append(f"condução nas fases de {join_human(other_phases).lower()}")
+            lines_with_heads = sum(1 for line in prop.livestock if extract_head_count(line) > 0)
+            if prop.head_count and lines_with_heads > 1:
+                details.append(f"plantel declarado de {format_pt_int(prop.head_count)} cabeças")
+            sentence = f"a atividade pecuária informada compreende {lower_first(livestock_text)}"
+            if details:
+                sentence += f", com {join_human(details)}"
+            if livestock_text:
+                sentences.append(sentence)
+            elif details:
+                sentences.append(f"a atividade pecuária declarada tem {join_human(details)}")
+
         if prop.crops:
-            details.append(f"área agrícola destinada a {', '.join(extract_crop_names(prop.crops)).lower()}")
+            crops = ", ".join(extract_crop_names(prop.crops)).lower()
+            sentence = f"a área agrícola destina-se à lavoura de {crops}"
+            if prop.crop_area_ha:
+                sentence += f", em {format_pt_number(prop.crop_area_ha)} ha declarados"
+            sentences.append(sentence)
+
         if prop.pastures:
-            details.append(", ".join(prop.pastures).lower())
+            grasses = join_human([pasture.removeprefix("Pastagens de ") for pasture in prop.pastures])
+            sentence = f"as pastagens declaradas são formadas por {grasses}"
+            if prop.pasture_area_ha:
+                sentence += f", em {format_pt_number(prop.pasture_area_ha)} ha informados"
+            sentences.append(sentence)
+
         if prop.comments:
-            details.append(join_human(prop.comments))
-        if prop.future_projects:
-            details.append("projetos futuros de " + join_human(prop.future_projects))
-        if details:
-            paragraphs.append(f"Na {prop.name}, foi informado {join_human(details)}.")
+            sentences.append(f"registra-se ainda: {join_human([lower_first(comment) for comment in prop.comments])}")
+
+        if not sentences:
+            continue
+
+        opener = property_block_opener(prop.name)
+        first, *rest = sentences
+        block = f"{opener}, {first}."
+        if rest:
+            block += " " + " ".join(f"{sentence[0].upper()}{sentence[1:]}." for sentence in rest)
+        paragraphs.append(block)
+
     if not paragraphs:
         return "Conforme as informações coletadas, não foram detalhadas benfeitorias específicas nas unidades produtivas."
     return "\n\n".join(paragraphs)
@@ -698,7 +937,12 @@ def render_improvements_section(notes: RawVisitNotes) -> str:
 def summarize_livestock(prop: PropertyNote) -> str:
     normalized_lines = []
     for line in prop.livestock:
-        text = re.sub(r"\s*-\s*\d+(?:[,.]\d+)?\s*alqueires?", "", line, flags=re.IGNORECASE)
+        # Linhas de confinamento sao descritas a parte (fase + area).
+        if normalize_key(line).startswith("confinamento"):
+            continue
+        text = re.sub(r"\s*-\s*\d+(?:[,.]\d+)?\s*(?:alqueires?|aqueires?|alq\.?|hectares?|ha)\b", "", line, flags=re.IGNORECASE)
+        text = re.sub(r"\s*-\s*(?:cria|recria|engorda|termina[cç][aã]o|confinamento)\s*$", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*-\s*(\d{1,6})\s*$", r", totalizando \1 cabeças", text)
         normalized_lines.append(text)
     return join_human(normalized_lines)
 
@@ -726,15 +970,60 @@ def render_investments_section(notes: RawVisitNotes) -> str:
     )
 
 
+# Evidencias de insumos declaradas nas anotacoes (rotulo humano -> termos).
+_INPUT_EVIDENCE = (
+    ("água", ("represa", "bebedouro", "poco", "artesiano", "corrego", "nascente", "acude", "cisterna", "reservatorio", "caixa_d", "tanque")),
+    ("energia elétrica", ("placa", "solar", "fotovolta", "energia", "gerador", "trifasic", "rede_eletrica")),
+    ("mão de obra", ("funcionario", "caseiro", "vaqueiro", "colaborador", "trabalhador", "peao", "peoes")),
+    ("estrutura de armazenagem", ("galpao", "silo", "armazem", "barracao", "paiol", "tulha", "trincheira", "deposito")),
+    ("estrutura de transporte", ("caminhao", "caminhoes", "caminhonete", "carreta", "frota")),
+)
+
+
+def detect_input_evidence(notes: RawVisitNotes) -> list[str]:
+    parts: list[str] = list(notes.equipment)
+    for prop in notes.properties:
+        parts.extend(prop.improvements)
+        parts.extend(prop.comments)
+    blob = normalize_key(" ".join(parts))
+    return [label for label, terms in _INPUT_EVIDENCE if any(term in blob for term in terms)]
+
+
 def render_other_comments(notes: RawVisitNotes, activities: str, cultures: str) -> str:
     total_area = sum(float(prop.area_ha or 0.0) for prop in notes.properties)
     location = f" em {notes.location}" if notes.location else ""
-    comments = [
-        f"A exploração rural{location} apresenta perfil diversificado, com atuação em {activities.lower()}.",
-        f"A área total informada corresponde a {format_pt_number(total_area)} hectares, considerando o fator técnico de {format_pt_number(ALQUEIRE_GOIANO_HA)} hectares por alqueire.",
-    ]
+    diversified = " e " in activities or "," in activities
+    profile = "perfil diversificado, com atuação em" if diversified else "perfil voltado a"
+    comments = [f"A exploração rural{location} apresenta {profile} {activities.lower()}."]
+
+    area_sentence = f"A área total informada corresponde a {format_pt_number(total_area)} hectares"
+    if notes.mentions_alqueires:
+        area_sentence += f", considerando o fator técnico de {format_pt_number(ALQUEIRE_GOIANO_HA)} hectares por alqueire"
+    comments.append(area_sentence + ".")
+
+    total_heads = notes.total_head_count
+    if total_heads:
+        comments.append(f"O plantel total informado é de {format_pt_int(total_heads)} cabeças.")
+
+    if notes.equipment:
+        comments.append(
+            f"O suporte de mecanização declarado reúne {len(notes.equipment)} "
+            f"{'itens' if len(notes.equipment) > 1 else 'item'} entre máquinas, veículos e implementos."
+        )
+
+    evidence = detect_input_evidence(notes)
+    if evidence:
+        comments.append(f"As anotações evidenciam disponibilidade de {join_human(evidence)}.")
+
     if cultures != "Não informado":
         comments.append(f"As principais culturas e suportes produtivos identificados foram: {cultures}.")
+
+    statuses = {normalize_key(prop.status) for prop in notes.properties if prop.status}
+    if "arrendada" in statuses:
+        comments.append("Parte das áreas declaradas é conduzida sob arrendamento.")
+    if "espolio" in statuses:
+        comments.append("Há área em condição de espólio, conforme informado.")
+
     tourism = [comment for prop in notes.properties for comment in prop.comments if "turismo" in normalize_key(comment)]
     if tourism:
         comments.append("Foi relatada exploração complementar de turismo rural em uma das propriedades, associada à disponibilidade hídrica e ao uso da casa para locação de finais de semana.")
@@ -746,18 +1035,36 @@ def render_other_comments(notes: RawVisitNotes, activities: str, cultures: str) 
 
 def render_conclusion(notes: RawVisitNotes, activities: str) -> str:
     client = notes.client or "O produtor"
+    total_area = sum(float(prop.area_ha or 0.0) for prop in notes.properties)
+    base = (
+        f"Conclui-se que {client} desenvolve atividade rural ativa, com base produtiva formada por "
+        f"{len(notes.properties)} unidade(s), área total informada de {format_pt_number(total_area)} hectares"
+    )
+    total_heads = notes.total_head_count
+    if total_heads:
+        base += f" e plantel declarado de {format_pt_int(total_heads)} cabeças"
+    base += f", com exploração voltada a {activities.lower()}."
+    support: list[str] = []
+    if notes.equipment:
+        support.append("suporte de mecanização próprio")
+    if any(prop.improvements for prop in notes.properties):
+        support.append("benfeitorias compatíveis com a atividade")
+    if support:
+        base += f" A estrutura declarada conta com {join_human(support)}."
     return (
-        f"Conclui-se que {client} desenvolve atividade rural ativa, com base produtiva formada por {len(notes.properties)} unidade(s) "
-        f"e exploração voltada a {activities.lower()}. As informações apresentadas demonstram estrutura operacional compatível com a escala declarada, "
+        base
+        + " As informações apresentadas demonstram estrutura operacional compatível com a escala declarada, "
         "recomendando-se a continuidade da análise de crédito rural após conferência documental, cadastral e patrimonial."
     )
 
 
 def render_direct_phrase(notes: RawVisitNotes, activities: str) -> str:
     total_area = sum(float(prop.area_ha or 0.0) for prop in notes.properties)
+    plantel = f", PLANTEL INFORMADO DE {format_pt_int(notes.total_head_count)} CABEÇAS" if notes.total_head_count else ""
     return (
         f"OPERAÇÃO AGROPECUÁRIA COM {len(notes.properties)} UNIDADE(S) PRODUTIVA(S), "
-        f"ÁREA TOTAL INFORMADA DE {format_pt_number(total_area)} HECTARES E ATUAÇÃO EM {activities.upper()}."
+        f"ÁREA TOTAL INFORMADA DE {format_pt_number(total_area)} HECTARES{plantel} "
+        f"E ATUAÇÃO EM {activities.upper()}."
     )
 
 
@@ -774,3 +1081,8 @@ def format_pt_number(value: float | int | None) -> str:
     number = 0.0 if value is None else float(value)
     text = f"{number:,.2f}"
     return text.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def format_pt_int(value: float | int | None) -> str:
+    number = 0 if value is None else int(round(float(value)))
+    return f"{number:,}".replace(",", ".")
