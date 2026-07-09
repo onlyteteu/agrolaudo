@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .report_engine import normalize_data, parse_decimal_pt
+from .report_engine import format_cpf_cnpj, normalize_data, parse_decimal_pt
 
 # Campos numericos (hectares) que devem virar float, no topo e por propriedade.
 _AREA_NUMBER_FIELDS = (
@@ -247,10 +247,11 @@ def _coerce_properties(value: Any) -> list[dict[str, Any]]:
 
 
 def _clean_cpf_cnpj(value: Any) -> str:
-    """Remove rotulos que a IA as vezes inclui no valor (ex.: 'CPF 123...')."""
+    """Remove rotulos que a IA as vezes inclui no valor (ex.: 'CPF 123...') e
+    padroniza a pontuacao (11 digitos -> CPF, 14 -> CNPJ)."""
     text = str(value or "").strip()
     text = re.sub(r"^(?:cpf\s*/\s*cnpj|cnpj\s*/\s*cpf|cpf|cnpj)\s*[:.\-]?\s*", "", text, flags=re.IGNORECASE)
-    return text.strip()
+    return format_cpf_cnpj(text.strip())
 
 
 def _coerce_insumos(value: Any) -> dict[str, bool]:

@@ -27,6 +27,7 @@ REVIEW_FIELDS = [
     {"key": "data_visita", "label": "Data da visita", "required": False, "type": "text"},
     {"key": "cpf_cnpj", "label": "CPF/CNPJ", "required": False, "type": "text"},
     {"key": "localizacao_1", "label": "Município / localização", "required": True, "type": "text"},
+    {"key": "comentario_localizacao", "label": "Vias de acesso", "required": False, "type": "textarea"},
     {"key": "imovel_nome", "label": "Propriedade(s)", "required": True, "type": "text"},
     {"key": "area_total_ha", "label": "Área total (ha)", "required": True, "type": "number"},
     {"key": "area_pastagens_ha", "label": "Pastagens (ha)", "required": False, "type": "number"},
