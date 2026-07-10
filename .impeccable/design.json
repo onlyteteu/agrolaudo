@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-10T13:30:00Z",
+  "title": "Design System: AgroLaudo",
+  "extensions": {
+    "colorMeta": {
+      "forest-950": { "role": "primary", "displayName": "Verde-Floresta (profundo)", "canonical": "#06150e", "tonalRamp": ["#06150e", "#0b271a", "#123c28", "#195636", "#237a4b", "#7db894", "#e4f1e1", "#f1f7ec"] },
+      "lime": { "role": "primary", "displayName": "Verde-Lima", "canonical": "#c2f24d", "tonalRamp": ["#2a3a0d", "#48611a", "#688a26", "#8ab433", "#a7df2f", "#c2f24d", "#dcf796", "#f2fbd9"] },
+      "amber": { "role": "secondary", "displayName": "Âmbar", "canonical": "#eaa53d", "tonalRamp": ["#3d2a0d", "#664617", "#8f6221", "#b8802c", "#eaa53d", "#f0bd6f", "#f6d6a1", "#fbeed3"] },
+      "gold": { "role": "secondary", "displayName": "Ouro", "canonical": "#c79a52", "tonalRamp": ["#332714", "#554122", "#786030", "#9c7d40", "#c79a52", "#d6b47d", "#e5cfa9", "#f4e9d5"] },
+      "bg": { "role": "neutral", "displayName": "Papel", "canonical": "#f1f4ea", "tonalRamp": ["#1a1f14", "#3a4430", "#5d6b5c", "#8b9a86", "#b8c4ae", "#dbe3cf", "#f1f4ea", "#fafcf5"] },
+      "ink": { "role": "neutral", "displayName": "Tinta", "canonical": "#101d15", "tonalRamp": ["#101d15", "#25352a", "#3d5044", "#5d6b5c", "#8b9a86", "#b8c4ae", "#dbe3cf", "#f1f4ea"] },
+      "warn": { "role": "neutral", "displayName": "Alerta", "canonical": "#8f5b07", "tonalRamp": ["#2e1d02", "#4d3104", "#6e4605", "#8f5b07", "#b87e1e", "#d9a94f", "#efd39a", "#fff6e3"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Título do hero, um por página." },
+      "headline": { "displayName": "Headline", "purpose": "Marca e títulos de painel." },
+      "title": { "displayName": "Title", "purpose": "Botões, chips e rótulos fortes." },
+      "body": { "displayName": "Body", "purpose": "Descrições e textos de apoio, máx. ~65ch." },
+      "label": { "displayName": "Label", "purpose": "Rótulos de navegação em caixa alta; uso raro." }
+    },
+    "shadows": [
+      { "name": "sombra-suave", "value": "0 8px 22px rgba(11, 39, 26, .07)", "purpose": "Cartões pequenos da barra lateral." },
+      { "name": "sombra-padrao", "value": "0 22px 50px rgba(11, 39, 26, .12)", "purpose": "Painéis de conteúdo." },
+      { "name": "sombra-hero", "value": "0 34px 80px rgba(7, 26, 17, .20)", "purpose": "Bloco escuro do hero." },
+      { "name": "anel-foco", "value": "0 0 0 3px rgba(35, 122, 75, .18)", "purpose": "Foco em campos e controles." }
+    ],
+    "motion": [
+      { "name": "transicao-controle", "value": "160ms ease", "purpose": "Hover/estado de botões (transform, box-shadow, background)." },
+      { "name": "transicao-nav", "value": "180ms ease", "purpose": "Links de navegação (background, color, transform)." },
+      { "name": "spin", "value": "700ms linear infinite", "purpose": "Spinner de carregamento em botões desabilitados." }
+    ],
+    "breakpoints": [
+      { "name": "tablet", "value": "980px" },
+      { "name": "mobile", "value": "560px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Botão Primário",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "A ação principal da tela — gradiente verde-lima com texto floresta.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Gerar e baixar planilha</button>",
+      "css": ".ds-btn { min-height: 46px; border-radius: 12px; border: 1px solid transparent; padding: 0 18px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; font-weight: 850; font-size: 14px; font-family: Inter, 'Segoe UI', system-ui, sans-serif; cursor: pointer; white-space: nowrap; transition: transform .16s ease, box-shadow .16s ease, background .16s ease; } .ds-btn:hover { transform: translateY(-2px); } .ds-btn-primary { background: linear-gradient(135deg, #c2f24d, #a7df2f); color: #06150e; box-shadow: 0 14px 30px rgba(141, 196, 47, .34); } .ds-btn-primary:hover { box-shadow: 0 20px 40px rgba(141, 196, 47, .42); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(35, 122, 75, .18); }"
+    },
+    {
+      "name": "Botão Escuro",
+      "kind": "button",
+      "refersTo": "button-dark",
+      "description": "Ação forte secundária — gradiente verde-floresta.",
+      "html": "<button class=\"ds-btn2 ds-btn-dark\">Ver exemplo</button>",
+      "css": ".ds-btn2 { min-height: 46px; border-radius: 12px; border: 1px solid transparent; padding: 0 18px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; font-weight: 850; font-size: 14px; font-family: Inter, 'Segoe UI', system-ui, sans-serif; cursor: pointer; transition: transform .16s ease, box-shadow .16s ease; } .ds-btn2:hover { transform: translateY(-2px); } .ds-btn-dark { background: linear-gradient(135deg, #195636, #06150e); color: #fff; box-shadow: 0 14px 28px rgba(11, 39, 26, .26); } .ds-btn-dark:hover { box-shadow: 0 20px 38px rgba(11, 39, 26, .34); } .ds-btn-dark:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(35, 122, 75, .18); }"
+    },
+    {
+      "name": "Botão Ghost",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Ação terciária — superfície branca com borda esverdeada.",
+      "html": "<button class=\"ds-btn3 ds-btn-ghost\">Limpar</button>",
+      "css": ".ds-btn3 { min-height: 46px; border-radius: 12px; padding: 0 18px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; font-weight: 850; font-size: 14px; font-family: Inter, 'Segoe UI', system-ui, sans-serif; cursor: pointer; transition: transform .16s ease, background .16s ease, border-color .16s ease; } .ds-btn3:hover { transform: translateY(-2px); } .ds-btn-ghost { background: #ffffff; border: 1px solid #cdd6c0; color: #0b271a; } .ds-btn-ghost:hover { background: #f1f7ec; border-color: #237a4b; } .ds-btn-ghost:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(35, 122, 75, .18); }"
+    },
+    {
+      "name": "Painel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Container padrão de conteúdo, com cabeçalho e corpo.",
+      "html": "<section class=\"ds-panel\"><div class=\"ds-panel-head\"><span class=\"ds-panel-title\">Entrada do relatório</span><span class=\"ds-panel-kicker\">Passo 1</span></div><div class=\"ds-panel-body\">Cole as anotações da vistoria e anexe as fotos.</div></section>",
+      "css": ".ds-panel { border: 1px solid #e0e6d6; border-radius: 14px; background: #ffffff; box-shadow: 0 22px 50px rgba(11, 39, 26, .12); overflow: hidden; font-family: Inter, 'Segoe UI', system-ui, sans-serif; min-width: 300px; } .ds-panel-head { min-height: 56px; padding: 14px 18px; border-bottom: 1px solid #e0e6d6; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: linear-gradient(180deg, rgba(255,255,255,.9), #f8faf2); } .ds-panel-title { color: #06150e; font-weight: 900; font-size: 15px; } .ds-panel-kicker { padding: 5px 11px; border-radius: 999px; background: #f1f7ec; color: #195636; font-size: 11.5px; font-weight: 850; } .ds-panel-body { padding: 18px; color: #5d6b5c; font-size: 14px; line-height: 1.5; }"
+    },
+    {
+      "name": "Tag da Marca",
+      "kind": "chip",
+      "refersTo": "rail-tag",
+      "description": "Pílula escura com ponto pulsante lima — selo de status da marca.",
+      "html": "<span class=\"ds-rail-tag\">Beta</span>",
+      "css": ".ds-rail-tag { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; border-radius: 999px; background: #06150e; color: #c2f24d; font-size: 11px; font-weight: 850; letter-spacing: .02em; font-family: Inter, 'Segoe UI', system-ui, sans-serif; } .ds-rail-tag::before { content: \"\"; width: 7px; height: 7px; border-radius: 50%; background: #c2f24d; box-shadow: 0 0 10px #c2f24d; }"
+    },
+    {
+      "name": "Link de Navegação (ativo)",
+      "kind": "nav",
+      "description": "Item da barra lateral no estado ativo, com lastro verde e indicador lima.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-link ds-active\" href=\"#\">Relatório de crédito</a><a class=\"ds-nav-link\" href=\"#\">Início</a></nav>",
+      "css": ".ds-nav { display: grid; gap: 5px; width: 220px; font-family: Inter, 'Segoe UI', system-ui, sans-serif; } .ds-nav-link { position: relative; min-height: 44px; padding: 0 12px; border-radius: 12px; display: flex; align-items: center; gap: 11px; color: #43543f; text-decoration: none; font-size: 14px; font-weight: 750; transition: background .18s ease, color .18s ease, transform .18s ease; } .ds-nav-link.ds-active { color: #06150e; background: linear-gradient(120deg, #e4f1e1, rgba(194,242,77,.28)); box-shadow: inset 0 0 0 1px rgba(35,122,75,.14); } .ds-nav-link:not(.ds-active):hover { background: #f1f7ec; color: #0b271a; transform: translateX(2px); }"
+    },
+    {
+      "name": "Aviso de Campo Faltando",
+      "kind": "custom",
+      "description": "Notice âmbar de honestidade do fluxo — o que o sistema não encontrou.",
+      "html": "<div class=\"ds-notice\">Campos faltando: Área total (ha), Conclusão.</div>",
+      "css": ".ds-notice { padding: 12px 14px; border-radius: 10px; background: #fff6e3; border: 1px solid #efd39a; color: #8f5b07; font-size: 13px; font-weight: 600; font-family: Inter, 'Segoe UI', system-ui, sans-serif; line-height: 1.45; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "A Mesa do Agrônomo",
+    "overview": "O AgroLaudo é o escritório técnico de quem vive o campo: papel claro sobre a mesa, carimbo verde-floresta e um único toque de verde-lima onde há ação. A superfície é clara e tranquila, os painéis são folhas de papel branco com sombras suaves, e a autoridade vem do verde-floresta profundo. A energia fica concentrada no verde-lima: é o 'assinar aqui' da interface. O sistema rejeita o sistema de banco antigo (telas cinzas, formulários burocráticos) e o SaaS genérico de IA (gradientes roxos, glassmorphism, selos 'powered by AI').",
+    "keyCharacteristics": [
+      "Uma única família tipográfica (Inter) em pesos muito altos (750–900): sólida e confiante, nunca delicada.",
+      "Neutros esverdeados em vez de cinza: até as bordas têm clorofila.",
+      "Verde-lima exclusivo para ação primária, estado ativo e marca.",
+      "Sombras grandes, suaves e esverdeadas — atmosfera de papel sobre mesa, não hierarquia.",
+      "Densidade de ferramenta: painéis compactos, chips informativos, fluxo de 3 passos sempre visível."
+    ],
+    "rules": [
+      { "name": "A Regra do Verde-Lima", "body": "O verde-lima marca exatamente três coisas: a ação primária, o estado ativo e a marca. Nunca aparece como decoração de fundo, borda de card ou cor de texto corrido. Sua raridade é a razão de ele funcionar.", "section": "colors" },
+      { "name": "A Regra do Cinza Proibido", "body": "Não existe cinza puro no sistema. Todo neutro (fundo, borda, texto secundário) carrega tom de verde. Se um hex novo tem R=G=B, está errado.", "section": "colors" },
+      { "name": "A Regra da Família Única", "body": "Nenhuma segunda fonte, nunca. Variação vem de peso (500 → 750 → 850 → 900) e tamanho, não de família.", "section": "typography" },
+      { "name": "A Regra da Sombra Verde", "body": "Toda sombra deriva de rgba(11, 39, 26, …) — o verde-floresta escurecido. Sombra preta pura denuncia elemento estranho ao sistema.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do concentrar o verde-lima na ação primária da tela — um botão primário por página, texto sempre forest-950 sobre lima.",
+      "Do usar os neutros esverdeados do sistema (#f1f4ea, #e0e6d6, #5d6b5c) para qualquer superfície ou borda nova.",
+      "Do manter o peso alto (850–900) em títulos e botões; a solidez é a personalidade.",
+      "Do mostrar estado com honestidade: campos faltando em âmbar, motor usado registrado, progresso visível durante a geração.",
+      "Do manter todo o fluxo principal funcional no celular."
+    ],
+    "donts": [
+      "Don't parecer sistema de banco antigo: nada de telas cinzas, tabelas densas sem respiro ou formulários burocráticos em série.",
+      "Don't parecer SaaS genérico de IA: proibido gradiente roxo, glassmorphism decorativo, selo 'powered by AI' e brilhos de template.",
+      "Don't usar cinza puro (R=G=B) em qualquer papel.",
+      "Don't estender o texto-gradiente do hero a nenhum outro elemento; é dívida visual, não padrão.",
+      "Don't multiplicar o eyebrow em caixa alta: ele existe só no hero.",
+      "Don't usar sombra preta pura ou sombras pequenas e duras.",
+      "Don't adicionar segunda família tipográfica, fontes display ou serifadas."
+    ]
+  }
+}
