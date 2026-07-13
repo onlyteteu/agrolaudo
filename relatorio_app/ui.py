@@ -1002,6 +1002,20 @@ def render_credit_report_page() -> str:
     }
     .notice.success { border-color: #bfd8c1; background: var(--forest-100); color: var(--forest-900); }
     .notice.show { display: block; }
+    textarea.missing { border-color: var(--warn); box-shadow: 0 0 0 3px rgba(143, 91, 7, .14); }
+    .retry-btn {
+      margin-left: 8px;
+      padding: 4px 12px;
+      border: 1px solid #d9a94f;
+      border-radius: 999px;
+      background: #fff;
+      color: #6c4a07;
+      font-size: 12.5px;
+      font-weight: 850;
+      cursor: pointer;
+      transition: background .15s ease;
+    }
+    .retry-btn:hover { background: var(--warn-bg); }
 
     /* Painel lateral de etapas */
     .side-panel { position: sticky; top: 18px; }
@@ -1386,8 +1400,13 @@ def render_credit_report_page() -> str:
     setPreview(payload.report_text || '');
     renderFields(payload.review);
     captureWriterMeta(payload);
-    writerNotice.className = 'notice success show';
-    writerNotice.textContent = 'Dados preparados. Gerando a planilha.';
+    if (payload.writer && !payload.writer.used_ai) {
+      writerNotice.className = 'notice show';
+      writerNotice.textContent = 'Texto gerado no modo local (IA indisponível). Revise o laudo antes de enviar ao banco.';
+    } else {
+      writerNotice.className = 'notice success show';
+      writerNotice.textContent = 'Dados preparados. Gerando a planilha.';
+    }
     setStatus('Dados prontos');
     return payload;
   }
@@ -1538,9 +1557,17 @@ def render_credit_report_page() -> str:
     reviewData.value = JSON.stringify({ parsed: lastExtraction.parsed, fields });
   }
 
-  function showError(message) {
+  function showError(message, canRetry) {
     writerNotice.textContent = message;
     writerNotice.className = 'notice show';
+    if (canRetry) {
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'retry-btn';
+      retry.textContent = 'Tentar de novo';
+      retry.addEventListener('click', () => form.requestSubmit());
+      writerNotice.append(retry);
+    }
     missingBox.textContent = message;
     missingBox.className = 'notice show';
     setStatus('Atenção');
@@ -1557,21 +1584,28 @@ def render_credit_report_page() -> str:
     const response = await fetch('/generate', {
       method: 'POST',
       body: formData,
+      headers: { 'Accept': 'application/json' },
       signal: abortController ? abortController.signal : undefined
     });
     if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text.replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim() || 'Não consegui gerar a planilha.');
+      let message = 'Não consegui gerar a planilha. Confira os dados e tente de novo.';
+      try {
+        const payload = await response.json();
+        if (payload.error) message = `Não consegui gerar a planilha: ${payload.error}`;
+      } catch (parseError) { /* resposta sem JSON: mantém a mensagem padrão */ }
+      throw new Error(message);
     }
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = filenameFromResponse(response);
+    const filename = filenameFromResponse(response);
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+    return filename;
   }
 
   fileInput.addEventListener('change', () => {
@@ -1618,6 +1652,9 @@ def render_credit_report_page() -> str:
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!rawData.value.trim() && !technicalText.value.trim()) {
+      rawData.classList.add('missing');
+      rawData.addEventListener('input', () => rawData.classList.remove('missing'), { once: true });
+      showError('Cole as anotações da vistoria para gerar a planilha.');
       rawData.focus();
       return;
     }
@@ -1636,16 +1673,24 @@ def render_credit_report_page() -> str:
       }
       syncReviewData();
       showOverlay('Gerando planilha', 'Preparando o arquivo para download.');
-      await downloadWorkbook();
+      const filename = await downloadWorkbook();
       if (cancelBtn) cancelBtn.hidden = true;
       overlayTitle.textContent = 'Download iniciado';
       overlayText.textContent = 'A planilha foi enviada para o navegador.';
+      const localMode = window.__lastWriter && !window.__lastWriter.used_ai;
+      writerNotice.className = localMode ? 'notice show' : 'notice success show';
+      writerNotice.textContent = localMode
+        ? `Planilha baixada: ${filename}. O texto saiu do modo local (IA indisponível) — revise antes de enviar ao banco.`
+        : `Planilha baixada: ${filename}.`;
       setStatus('Planilha baixada');
       setTimeout(hideOverlay, 1200);
     } catch (error) {
       if (error.name === 'AbortError') return;
       hideOverlay();
-      showError(error.message);
+      const message = /failed to fetch|networkerror|load failed/i.test(String(error.message))
+        ? 'Falha de conexão. Verifique sua internet e tente de novo — suas anotações continuam aqui.'
+        : error.message;
+      showError(message, true);
     } finally {
       abortController = null;
       setAllBusy(false);
