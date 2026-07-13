@@ -205,7 +205,7 @@ Tela de espera do download: card central com loader, barra de progresso e botão
 - **Don't** parecer **sistema de banco antigo** (anti-referência do PRODUCT.md): nada de telas cinzas, tabelas densas sem respiro ou formulários burocráticos em série.
 - **Don't** parecer **SaaS genérico de IA** (anti-referência do PRODUCT.md): proibido gradiente roxo, glassmorphism decorativo, selo "powered by AI" e brilhos de template.
 - **Don't** usar cinza puro (R=G=B) em qualquer papel — viola a Regra do Cinza Proibido.
-- **Don't** estender o texto-gradiente do hero (`background-clip: text` no `.accent`) a nenhum outro elemento; é uma dívida visual do hero atual, não um padrão — na primeira revisão do hero, substituir por lima sólido.
+- **Don't** usar texto-gradiente (`background-clip: text`) em nenhum elemento. O destaque do hero é verde-lima sólido; ênfase vem de peso e tamanho, nunca de gradiente no texto.
 - **Don't** multiplicar o eyebrow em caixa alta: ele existe só no hero. Seções internas usam `section-label` (peso 900, sem caixa alta, com régua).
 - **Don't** usar sombra preta pura ou sombras pequenas e duras — toda sombra segue o vocabulário verde da seção Elevation.
 - **Don't** adicionar segunda família tipográfica, fontes display ou serifadas em qualquer papel.

@@ -278,12 +278,7 @@ def _base_css() -> str:
       letter-spacing: -.03em;
       font-weight: 900;
     }
-    .hero h1 .accent {
-      background: linear-gradient(100deg, var(--lime), #f1d97a);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-    }
+    .hero h1 .accent { color: var(--lime); }
     .hero .lead {
       max-width: 560px;
       margin: 14px 0 0;
@@ -556,7 +551,7 @@ def render_home() -> str:
       max-width: 64%;
       border-radius: 12px;
       background: #fff;
-      box-shadow: 0 22px 44px rgba(0,0,0,.30);
+      box-shadow: 0 22px 44px rgba(7, 26, 17, .32);
       padding: 16px;
     }}
     .sheet-top {{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }}
@@ -578,7 +573,7 @@ def render_home() -> str:
       overflow: hidden;
       border: 2px solid rgba(255,255,255,.85);
       background: linear-gradient(150deg, #3f8f61, var(--gold));
-      box-shadow: 0 18px 36px rgba(0,0,0,.32);
+      box-shadow: 0 18px 36px rgba(7, 26, 17, .35);
     }}
     .photo-card::after {{
       content: "";
@@ -603,7 +598,7 @@ def render_home() -> str:
       color: var(--forest-900);
       font-size: 12px;
       font-weight: 850;
-      box-shadow: 0 12px 26px rgba(0,0,0,.22);
+      box-shadow: 0 12px 26px rgba(7, 26, 17, .25);
     }}
     .visual-caption .dot {{ width: 8px; height: 8px; border-radius: 50%; background: var(--lime-strong); box-shadow: 0 0 0 3px rgba(167,223,47,.28); }}
     .visual-badge {{
@@ -618,7 +613,7 @@ def render_home() -> str:
       place-items: center;
       color: var(--forest-700);
       background: rgba(255,255,255,.94);
-      box-shadow: 0 12px 26px rgba(0,0,0,.20);
+      box-shadow: 0 12px 26px rgba(7, 26, 17, .22);
     }}
     .visual-badge svg {{ width: 22px; height: 22px; }}
 
@@ -642,8 +637,8 @@ def render_home() -> str:
       display: grid;
       place-items: center;
       font-weight: 900;
-      color: var(--forest-950);
-      background: linear-gradient(135deg, var(--lime), var(--lime-strong));
+      color: var(--forest-800);
+      background: var(--forest-100);
       margin-bottom: 13px;
     }}
     .step-card h4 {{ margin: 0 0 5px; font-size: 15.5px; color: var(--forest-950); letter-spacing: -.01em; }}
@@ -1060,8 +1055,8 @@ def render_credit_report_page() -> str:
       display: grid; place-items: center;
       line-height: 1;
       font-size: 13px; font-weight: 900;
-      color: var(--forest-950);
-      background: linear-gradient(135deg, var(--lime), var(--lime-strong));
+      color: var(--forest-800);
+      background: var(--forest-100);
     }
     .step strong { display: block; color: var(--forest-950); font-size: 13.5px; }
     .step span { display: block; margin-top: 3px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
@@ -1108,7 +1103,7 @@ def render_credit_report_page() -> str:
       border-radius: var(--radius);
       padding: 26px;
       background: #fffef9;
-      box-shadow: 0 40px 90px rgba(0,0,0,.4);
+      box-shadow: 0 40px 90px rgba(6, 21, 14, .45);
       text-align: center;
     }
     .loader {
@@ -1134,7 +1129,7 @@ def render_credit_report_page() -> str:
       cursor: pointer;
       transition: background .15s ease, color .15s ease, border-color .15s ease;
     }
-    .overlay-cancel:hover { background: #fdeeee; border-color: #e0b3b3; color: #b23b3b; }
+    .overlay-cancel:hover { background: var(--warn-bg); border-color: #d9a94f; color: var(--warn); }
     .overlay-cancel[hidden] { display: none; }
     .progress-track { height: 8px; border-radius: 999px; margin-top: 18px; overflow: hidden; background: #e7eddf; }
     /* Progresso real por etapa (o JS define a largura); nada de barra falsa em loop. */
@@ -1227,7 +1222,7 @@ def render_credit_report_page() -> str:
                   <span class="spinner" aria-hidden="true"></span>
                   <span class="btn-label">Gerar e conferir</span>
                 </button>
-                <p class="muted">O sistema escreve o texto técnico, extrai os campos e mostra tudo para você conferir antes de baixar.</p>
+                <p class="muted">O sistema escreve o texto técnico, extrai os campos e mostra tudo para você conferir antes de baixar. Atalho: Ctrl+Enter.</p>
               </div>
 
               <input type="hidden" id="reviewData" name="review_data">
@@ -1334,6 +1329,26 @@ def render_credit_report_page() -> str:
     if (statusTile) statusTile.textContent = text;
   }
 
+  // Rascunho: sobrevive a F5 e a aba reciclada no celular.
+  const DRAFT_KEY = 'agrolaudo-rascunho';
+  try {
+    if (!rawData.value && sessionStorage.getItem(DRAFT_KEY)) {
+      rawData.value = sessionStorage.getItem(DRAFT_KEY);
+      setStatus('Rascunho recuperado');
+    }
+  } catch (storageError) { /* sessionStorage indisponível: segue sem rascunho */ }
+  rawData.addEventListener('input', () => {
+    try { sessionStorage.setItem(DRAFT_KEY, rawData.value); } catch (storageError) { /* sem espaço/permissão */ }
+  });
+
+  // Ctrl+Enter (ou Cmd+Enter) gera direto do campo de anotações.
+  rawData.addEventListener('keydown', (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      event.preventDefault();
+      form.requestSubmit();
+    }
+  });
+
   const SAMPLE_NOTES = [
     'José Carlos Ferreira',
     'CPF 123.456.789-00',
@@ -1370,6 +1385,7 @@ def render_credit_report_page() -> str:
 
   document.getElementById('clearBtn').addEventListener('click', () => {
     rawData.value = '';
+    try { sessionStorage.removeItem(DRAFT_KEY); } catch (storageError) { /* ok */ }
     technicalText.value = '';
     technicalPreview.value = '';
     fieldsEl.innerHTML = '';
@@ -1794,7 +1810,7 @@ def render_credit_report_page() -> str:
     if (!toast) {
       toast = document.createElement('div');
       toast.id = 'writerToast';
-      toast.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:60;max-width:90vw;padding:12px 16px;border-radius:12px;background:#06150e;color:#e9f7ea;font:600 13px/1.4 Inter,"Segoe UI",Arial,sans-serif;box-shadow:0 18px 40px rgba(0,0,0,.35);border:1px solid rgba(194,242,77,.35);opacity:0;transition:opacity .2s ease;pointer-events:none;text-align:center;';
+      toast.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:60;max-width:90vw;padding:12px 16px;border-radius:12px;background:#06150e;color:#e9f7ea;font:600 13px/1.4 Inter,"Segoe UI",Arial,sans-serif;box-shadow:0 18px 40px rgba(6,21,14,.4);border:1px solid rgba(194,242,77,.35);opacity:0;transition:opacity .2s ease;pointer-events:none;text-align:center;';
       document.body.appendChild(toast);
     }
     toast.style.color = meta && meta.used_ai ? '#c2f24d' : '#f0c27a';

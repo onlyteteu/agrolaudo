@@ -118,7 +118,7 @@
       "Don't parecer sistema de banco antigo: nada de telas cinzas, tabelas densas sem respiro ou formulários burocráticos em série.",
       "Don't parecer SaaS genérico de IA: proibido gradiente roxo, glassmorphism decorativo, selo 'powered by AI' e brilhos de template.",
       "Don't usar cinza puro (R=G=B) em qualquer papel.",
-      "Don't estender o texto-gradiente do hero a nenhum outro elemento; é dívida visual, não padrão.",
+      "Don't usar texto-gradiente (background-clip: text) em nenhum elemento; o destaque do hero é verde-lima sólido.",
       "Don't multiplicar o eyebrow em caixa alta: ele existe só no hero.",
       "Don't usar sombra preta pura ou sombras pequenas e duras.",
       "Don't adicionar segunda família tipográfica, fontes display ou serifadas."
