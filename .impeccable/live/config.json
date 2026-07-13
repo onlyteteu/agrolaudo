@@ -1,0 +1,6 @@
+{
+  "files": ["relatorio_app/ui.py", "server.py"],
+  "insertBefore": "</body>",
+  "commentSyntax": "html",
+  "cspChecked": true
+}

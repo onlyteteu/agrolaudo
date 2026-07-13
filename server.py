@@ -7,6 +7,7 @@ import html
 import json
 import mimetypes
 import os
+import re
 import uuid
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -90,7 +91,13 @@ class ReportHandler(BaseHTTPRequestHandler):
         try:
             generated = generate_report(review_data or data_text, photos, output_path, writer_meta=writer_meta)
         except Exception as exc:
-            self.respond_html(render_error(str(exc)), status=500)
+            # Fetch do front pede JSON (mostra a mensagem + "Tentar de novo" na
+            # propria pagina, sem perder o formulario); sem JS cai no HTML.
+            message = friendly_error_message(exc)
+            if "application/json" in (self.headers.get("Accept") or ""):
+                self.respond_json({"error": message}, status=500)
+            else:
+                self.respond_html(render_error(message), status=500)
             return
 
         self.serve_file(generated, download_name=generated.name)
@@ -353,6 +360,16 @@ def parse_writer_meta(raw: str) -> dict | None:
     return meta if isinstance(meta, dict) else None
 
 
+def friendly_error_message(exc: Exception) -> str:
+    """Mensagem de erro para o usuario, sem vazar caminhos internos do servidor."""
+    text = str(exc)
+    if "identify image" in text or "image file" in text:
+        return "Uma das fotos não pôde ser lida. Remova a foto com problema e tente de novo."
+    if re.search(r"[A-Za-z]:\\", text):
+        return "Falha interna ao montar a planilha. Tente de novo; se persistir, gere sem as fotos."
+    return text
+
+
 def render_error(message: str) -> str:
     return f"""<!doctype html>
 <html lang="pt-BR">
@@ -361,18 +378,20 @@ def render_error(message: str) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AgroLaudo | Erro</title>
   <style>
-    body {{ margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f5f7f2; font-family: "Segoe UI", Arial, sans-serif; color: #17221c; }}
-    .box {{ width: min(680px, calc(100vw - 32px)); background: white; border: 1px solid #d7dfd2; border-radius: 8px; padding: 22px; }}
-    h1 {{ margin: 0 0 14px; font-size: 22px; }}
-    pre {{ white-space: pre-wrap; background: #fff7ed; border: 1px solid #f0d8b0; border-radius: 8px; padding: 14px; }}
-    a {{ color: #1f6b49; font-weight: 800; }}
+    body {{ margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f1f4ea; font-family: Inter, "Segoe UI", system-ui, Arial, sans-serif; color: #101d15; }}
+    .box {{ width: min(640px, calc(100vw - 32px)); background: #fff; border: 1px solid #e0e6d6; border-radius: 14px; padding: 26px; box-shadow: 0 22px 50px rgba(11, 39, 26, .12); }}
+    h1 {{ margin: 0 0 8px; font-size: 20px; font-weight: 900; letter-spacing: -.02em; color: #06150e; }}
+    p {{ margin: 0 0 14px; color: #5d6b5c; font-size: 14px; line-height: 1.5; }}
+    pre {{ white-space: pre-wrap; margin: 0 0 18px; background: #fff6e3; border: 1px solid #efd8a5; border-radius: 10px; padding: 13px; color: #6c4a07; font: 600 13px/1.5 Inter, "Segoe UI", Arial, sans-serif; }}
+    a {{ display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; border-radius: 12px; background: linear-gradient(135deg, #195636, #06150e); color: #fff; font-weight: 850; text-decoration: none; }}
   </style>
 </head>
 <body>
   <div class="box">
-    <h1>Não consegui gerar o relatório</h1>
+    <h1>Não consegui gerar a planilha</h1>
+    <p>Suas anotações não foram perdidas — volte e clique em "Gerar" novamente.</p>
     <pre>{html.escape(message)}</pre>
-    <a href="/">Voltar</a>
+    <a href="/relatorio-credito">Voltar para a ferramenta</a>
   </div>
 </body>
 </html>"""

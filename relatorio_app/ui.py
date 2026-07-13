@@ -897,8 +897,8 @@ def render_credit_report_page() -> str:
       transition: border-color .15s ease, box-shadow .15s ease;
     }
     textarea:focus, input[type="text"]:focus { border-color: var(--forest-600); box-shadow: var(--ring); }
-    textarea { min-height: 250px; resize: vertical; padding: 16px; font: 15px/1.6 "Segoe UI", Arial, sans-serif; }
-    #rawData::placeholder { color: #97a397; line-height: 1.7; }
+    textarea { min-height: 250px; resize: vertical; padding: 16px; font: 15px/1.6 Inter, "Segoe UI", Arial, sans-serif; }
+    #rawData::placeholder { color: var(--muted); line-height: 1.7; }
     input[type="text"] { min-height: 40px; padding: 10px 12px; font-size: 14px; }
     .link-btn {
       display: inline-flex;
@@ -942,7 +942,15 @@ def render_credit_report_page() -> str:
     }
     .upload-button:hover { border-color: var(--forest-600); transform: translateY(-2px); box-shadow: var(--shadow-sm); }
     .upload-button.drag-over { border-color: var(--lime-strong); background: linear-gradient(140deg, rgba(35,122,75,.12), rgba(194,242,77,.26)), #fffef9; }
-    .upload-button input { display: none; }
+    .upload-button { position: relative; }
+    .upload-button input {
+      position: absolute;
+      width: 1px; height: 1px;
+      opacity: 0;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+    }
+    .upload-button:focus-within { border-color: var(--forest-600); box-shadow: var(--ring); }
     .upload-button strong { display: block; font-size: 15px; }
     .upload-button small { display: block; color: var(--muted); font-size: 12px; font-weight: 600; }
     .upload-icon {
@@ -1002,6 +1010,20 @@ def render_credit_report_page() -> str:
     }
     .notice.success { border-color: #bfd8c1; background: var(--forest-100); color: var(--forest-900); }
     .notice.show { display: block; }
+    textarea.missing { border-color: var(--warn); box-shadow: 0 0 0 3px rgba(143, 91, 7, .14); }
+    .retry-btn {
+      margin-left: 8px;
+      padding: 4px 12px;
+      border: 1px solid #d9a94f;
+      border-radius: 999px;
+      background: #fff;
+      color: #6c4a07;
+      font-size: 12.5px;
+      font-weight: 850;
+      cursor: pointer;
+      transition: background .15s ease;
+    }
+    .retry-btn:hover { background: var(--warn-bg); }
 
     /* Painel lateral de etapas */
     .side-panel { position: sticky; top: 18px; }
@@ -1039,6 +1061,25 @@ def render_credit_report_page() -> str:
     .status-tile strong { color: var(--forest-950); font-size: 16px; }
 
     .hidden-workspace { display: none; }
+
+    /* Painel de conferencia (abre apos a extracao, antes do download) */
+    .review-panel { grid-column: 1 / -1; }
+    .review-panel[hidden] { display: none; }
+    .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+    .field label { margin-bottom: 5px; }
+    .field .required {
+      margin-left: 6px;
+      color: var(--warn);
+      font-size: 10.5px;
+      font-weight: 850;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .field textarea { min-height: 84px; padding: 10px 12px; font-size: 13.5px; line-height: 1.5; }
+    .field.missing input, .field.missing textarea { border-color: var(--warn); background: var(--warn-bg); }
+    #technicalPreview { min-height: 220px; font-size: 13.5px; }
+    .review-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .review-actions .btn-primary { min-height: 50px; }
 
     /* Overlay de progresso */
     .overlay {
@@ -1160,14 +1201,14 @@ def render_credit_report_page() -> str:
                 <div class="file-list" id="fileList"></div>
               </div>
 
-              <div id="writerNotice" class="notice"></div>
+              <div id="writerNotice" class="notice" role="status" aria-live="polite"></div>
 
               <div class="submit-wrap">
-                <button class="btn btn-primary" type="submit" id="submitBtn" data-label="Gerar e baixar planilha">
+                <button class="btn btn-primary" type="submit" id="submitBtn" data-label="Gerar e conferir">
                   <span class="spinner" aria-hidden="true"></span>
-                  <span class="btn-label">Gerar e baixar planilha</span>
+                  <span class="btn-label">Gerar e conferir</span>
                 </button>
-                <p class="muted">O texto técnico e a extração acontecem automaticamente antes do download.</p>
+                <p class="muted">O sistema escreve o texto técnico, extrai os campos e mostra tudo para você conferir antes de baixar.</p>
               </div>
 
               <input type="hidden" id="reviewData" name="review_data">
@@ -1198,16 +1239,40 @@ def render_credit_report_page() -> str:
             </section>
           </aside>
 
+          <section class="panel review-panel" id="reviewPanel" hidden>
+            <div class="panel-head">
+              <div class="panel-title">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Conferência antes do download
+              </div>
+              <span class="panel-kicker" id="reviewEngine"></span>
+            </div>
+            <div class="panel-body">
+              <div id="okBox" class="notice success"></div>
+              <div id="missingBox" class="notice" role="status" aria-live="polite"></div>
+              <div>
+                <label for="technicalPreview">Texto técnico do laudo (edite direto se precisar)</label>
+                <textarea id="technicalPreview"></textarea>
+              </div>
+              <div id="fields" class="fields"></div>
+              <div class="review-actions">
+                <button class="btn btn-primary" type="submit" id="downloadBtn" data-label="Baixar planilha">
+                  <span class="spinner" aria-hidden="true"></span>
+                  <span class="btn-label">Baixar planilha</span>
+                </button>
+                <button type="button" class="btn btn-ghost" id="extractBtn" data-label="Atualizar extração">
+                  <span class="spinner" aria-hidden="true"></span>
+                  <span class="btn-label">Atualizar extração</span>
+                </button>
+              </div>
+            </div>
+          </section>
+
           <div class="hidden-workspace" aria-hidden="true">
             <div class="summary" id="summaryItems"></div>
-            <div id="fields" class="fields"></div>
-            <textarea id="technicalPreview"></textarea>
             <button type="button" id="writeBtn" data-label="Gerar texto técnico"></button>
-            <button type="button" id="extractBtn" data-label="Atualizar extração"></button>
             <strong id="statusText">Pronto para gerar</strong>
             <div id="previewBox"></div>
-            <div id="okBox"></div>
-            <div id="missingBox"></div>
           </div>
         </form>
       </div>
@@ -1250,6 +1315,9 @@ def render_credit_report_page() -> str:
   const overlayText = document.getElementById('overlayText');
   const clearPhotosBtn = document.getElementById('clearPhotosBtn');
   const cancelBtn = document.getElementById('cancelBtn');
+  const reviewPanel = document.getElementById('reviewPanel');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const reviewEngine = document.getElementById('reviewEngine');
   let lastExtraction = null;
   let abortController = null;
 
@@ -1308,6 +1376,7 @@ def render_credit_report_page() -> str:
     setStatus('Pronto para gerar');
     reviewData.value = '';
     lastExtraction = null;
+    if (reviewPanel) reviewPanel.hidden = true;
     if (fileInput) fileInput.value = '';
     if (fileCount) fileCount.textContent = 'Nenhuma foto selecionada';
     if (fileList) fileList.innerHTML = '';
@@ -1331,6 +1400,7 @@ def render_credit_report_page() -> str:
 
   function setAllBusy(busy, label = 'Gerando') {
     setBusy(submitBtn, busy, label);
+    setBusy(downloadBtn, busy, label);
     setBusy(writeBtn, busy, 'Aguarde');
     setBusy(extractBtn, busy, 'Aguarde');
   }
@@ -1386,8 +1456,13 @@ def render_credit_report_page() -> str:
     setPreview(payload.report_text || '');
     renderFields(payload.review);
     captureWriterMeta(payload);
-    writerNotice.className = 'notice success show';
-    writerNotice.textContent = 'Dados preparados. Gerando a planilha.';
+    if (payload.writer && !payload.writer.used_ai) {
+      writerNotice.className = 'notice show';
+      writerNotice.textContent = 'Texto gerado no modo local (IA indisponível). Revise o laudo antes de enviar ao banco.';
+    } else {
+      writerNotice.className = 'notice success show';
+      writerNotice.textContent = 'Dados preparados. Gerando a planilha.';
+    }
     setStatus('Dados prontos');
     return payload;
   }
@@ -1407,6 +1482,7 @@ def render_credit_report_page() -> str:
     window.__lastWriter = meta;
     const input = document.getElementById('writerMeta');
     if (input) input.value = JSON.stringify(meta);
+    if (reviewEngine) reviewEngine.textContent = meta.used_ai ? 'Texto: IA (Gemini)' : 'Texto: modo local — revise';
     return meta;
   }
 
@@ -1538,9 +1614,17 @@ def render_credit_report_page() -> str:
     reviewData.value = JSON.stringify({ parsed: lastExtraction.parsed, fields });
   }
 
-  function showError(message) {
+  function showError(message, canRetry) {
     writerNotice.textContent = message;
     writerNotice.className = 'notice show';
+    if (canRetry) {
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'retry-btn';
+      retry.textContent = 'Tentar de novo';
+      retry.addEventListener('click', () => form.requestSubmit());
+      writerNotice.append(retry);
+    }
     missingBox.textContent = message;
     missingBox.className = 'notice show';
     setStatus('Atenção');
@@ -1557,21 +1641,28 @@ def render_credit_report_page() -> str:
     const response = await fetch('/generate', {
       method: 'POST',
       body: formData,
+      headers: { 'Accept': 'application/json' },
       signal: abortController ? abortController.signal : undefined
     });
     if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text.replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim() || 'Não consegui gerar a planilha.');
+      let message = 'Não consegui gerar a planilha. Confira os dados e tente de novo.';
+      try {
+        const payload = await response.json();
+        if (payload.error) message = `Não consegui gerar a planilha: ${payload.error}`;
+      } catch (parseError) { /* resposta sem JSON: mantém a mensagem padrão */ }
+      throw new Error(message);
     }
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = filenameFromResponse(response);
+    const filename = filenameFromResponse(response);
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+    return filename;
   }
 
   fileInput.addEventListener('change', () => {
@@ -1618,6 +1709,9 @@ def render_credit_report_page() -> str:
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!rawData.value.trim() && !technicalText.value.trim()) {
+      rawData.classList.add('missing');
+      rawData.addEventListener('input', () => rawData.classList.remove('missing'), { once: true });
+      showError('Cole as anotações da vistoria para gerar a planilha.');
       rawData.focus();
       return;
     }
@@ -1634,18 +1728,35 @@ def render_credit_report_page() -> str:
         const ok = await refreshFieldsFromTechnicalText();
         if (!ok) { hideOverlay(); return; }
       }
+      // Primeira passagem: abre a conferencia em vez de baixar direto.
+      // O download so acontece a partir do botao do painel de conferencia.
+      if (reviewPanel && reviewPanel.hidden) {
+        hideOverlay();
+        reviewPanel.hidden = false;
+        setStatus('Confira e baixe');
+        reviewPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
       syncReviewData();
       showOverlay('Gerando planilha', 'Preparando o arquivo para download.');
-      await downloadWorkbook();
+      const filename = await downloadWorkbook();
       if (cancelBtn) cancelBtn.hidden = true;
       overlayTitle.textContent = 'Download iniciado';
       overlayText.textContent = 'A planilha foi enviada para o navegador.';
+      const localMode = window.__lastWriter && !window.__lastWriter.used_ai;
+      writerNotice.className = localMode ? 'notice show' : 'notice success show';
+      writerNotice.textContent = localMode
+        ? `Planilha baixada: ${filename}. O texto saiu do modo local (IA indisponível) — revise antes de enviar ao banco.`
+        : `Planilha baixada: ${filename}.`;
       setStatus('Planilha baixada');
       setTimeout(hideOverlay, 1200);
     } catch (error) {
       if (error.name === 'AbortError') return;
       hideOverlay();
-      showError(error.message);
+      const message = /failed to fetch|networkerror|load failed/i.test(String(error.message))
+        ? 'Falha de conexão. Verifique sua internet e tente de novo — suas anotações continuam aqui.'
+        : error.message;
+      showError(message, true);
     } finally {
       abortController = null;
       setAllBusy(false);

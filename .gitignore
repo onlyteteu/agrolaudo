@@ -17,3 +17,11 @@ uploads/
 *.log
 .DS_Store
 Thumbs.db
+
+# Ferramentas de agente/plugins locais (nao fazem parte do app)
+.agents/
+.codex/
+.claude/skills/
+skills-lock.json
+.impeccable/config.local.json
+.impeccable/critique/
