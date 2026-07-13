@@ -381,7 +381,7 @@ def _base_css() -> str:
       gap: 12px;
       background: linear-gradient(180deg, rgba(255,255,255,.9), var(--surface-soft));
     }
-    .panel-title { display: flex; align-items: center; gap: 10px; color: var(--forest-950); font-weight: 900; }
+    .panel-title { display: flex; align-items: center; gap: 10px; margin: 0; color: var(--forest-950); font-size: 15.5px; font-weight: 900; }
     .panel-title svg { width: 19px; height: 19px; color: var(--forest-600); }
     .panel-kicker {
       padding: 5px 11px;
@@ -877,15 +877,6 @@ def render_credit_report_page() -> str:
     }
     .notes-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
     .notes-head label { margin: 0; }
-    .notes-badge {
-      padding: 6px 11px;
-      border-radius: 999px;
-      background: var(--forest-50);
-      color: var(--forest-800);
-      font-size: 12px;
-      font-weight: 850;
-      white-space: nowrap;
-    }
     label { display: block; margin-bottom: 7px; color: #2e4236; font-size: 13px; font-weight: 850; }
     textarea, input[type="text"] {
       width: 100%;
@@ -900,6 +891,13 @@ def render_credit_report_page() -> str:
     textarea { min-height: 250px; resize: vertical; padding: 16px; font: 15px/1.6 Inter, "Segoe UI", Arial, sans-serif; }
     #rawData::placeholder { color: var(--muted); line-height: 1.7; }
     input[type="text"] { min-height: 40px; padding: 10px 12px; font-size: 14px; }
+    /* Area de toque >=44px em acoes pequenas, sem crescer o visual. */
+    .link-btn, .clear-photos, .retry-btn, .clear-btn { position: relative; }
+    .link-btn::before, .clear-photos::before, .retry-btn::before, .clear-btn::before {
+      content: "";
+      position: absolute;
+      inset: -8px;
+    }
     .link-btn {
       display: inline-flex;
       align-items: center;
@@ -988,11 +986,28 @@ def render_credit_report_page() -> str:
       background: #fff;
       color: var(--forest-950);
       display: flex; align-items: center; justify-content: space-between; gap: 8px;
-      padding: 6px 11px;
+      padding: 6px 6px 6px 11px;
       font-size: 12px;
     }
     .file-pill span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .file-pill small { color: var(--muted); flex: 0 0 auto; }
+    .pill-remove {
+      flex: 0 0 auto;
+      position: relative;
+      width: 22px; height: 22px;
+      border: 1px solid var(--line-strong);
+      border-radius: 50%;
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: background .15s ease, color .15s ease;
+    }
+    .pill-remove:hover { background: var(--warn-bg); color: var(--warn); border-color: #d9a94f; }
+    .pill-remove::before { content: ""; position: absolute; inset: -11px; }
 
     .submit-wrap { display: grid; gap: 8px; }
     .submit-wrap .btn-primary { min-height: 56px; font-size: 15.5px; width: 100%; }
@@ -1060,8 +1075,6 @@ def render_credit_report_page() -> str:
     .status-tile small { color: var(--forest-700); font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: .04em; }
     .status-tile strong { color: var(--forest-950); font-size: 16px; }
 
-    .hidden-workspace { display: none; }
-
     /* Painel de conferencia (abre apos a extracao, antes do download) */
     .review-panel { grid-column: 1 / -1; }
     .review-panel[hidden] { display: none; }
@@ -1124,17 +1137,23 @@ def render_credit_report_page() -> str:
     .overlay-cancel:hover { background: #fdeeee; border-color: #e0b3b3; color: #b23b3b; }
     .overlay-cancel[hidden] { display: none; }
     .progress-track { height: 8px; border-radius: 999px; margin-top: 18px; overflow: hidden; background: #e7eddf; }
+    /* Progresso real por etapa (o JS define a largura); nada de barra falsa em loop. */
     .progress-bar {
-      width: 42%; height: 100%;
+      width: 0%; height: 100%;
       border-radius: inherit;
       background: linear-gradient(90deg, var(--forest-600), var(--lime-strong));
-      animation: progress 1.5s ease-in-out infinite;
+      transition: width .5s ease;
     }
-    @keyframes progress { 0% { transform: translateX(-90%);} 55% { transform: translateX(95%);} 100% { transform: translateX(190%);} }
 
     @media (max-width: 1100px) {
       .workspace { grid-template-columns: 1fr; }
       .side-panel { position: static; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { transition-duration: .01ms !important; }
+      .spinner, .loader { animation-duration: 1.6s; }
+      .btn:hover, .link-btn:hover, .nav a:not(.active):hover, .upload-button:hover { transform: none; }
     }
   </style>
 </head>
@@ -1162,10 +1181,10 @@ def render_credit_report_page() -> str:
         <form id="reportForm" method="post" action="/generate" enctype="multipart/form-data" class="workspace">
           <section class="panel main-panel">
             <div class="panel-head">
-              <div class="panel-title">
+              <h2 class="panel-title">
                 <svg viewBox="0 0 24 24" fill="none"><path d="M4 5h16M4 12h16M4 19h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 Entrada do relatório
-              </div>
+              </h2>
               <button class="clear-btn" type="button" id="clearBtn">
                 <svg viewBox="0 0 24 24" fill="none"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v3.6h3.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 Limpar
@@ -1220,10 +1239,10 @@ def render_credit_report_page() -> str:
           <aside class="side-panel">
             <section class="panel">
               <div class="panel-head">
-                <div class="panel-title">
+                <h2 class="panel-title">
                   <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                   Como funciona
-                </div>
+                </h2>
               </div>
               <div class="panel-body">
                 <div class="status-tile">
@@ -1241,10 +1260,10 @@ def render_credit_report_page() -> str:
 
           <section class="panel review-panel" id="reviewPanel" hidden>
             <div class="panel-head">
-              <div class="panel-title">
+              <h2 class="panel-title">
                 <svg viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 Conferência antes do download
-              </div>
+              </h2>
               <span class="panel-kicker" id="reviewEngine"></span>
             </div>
             <div class="panel-body">
@@ -1268,12 +1287,6 @@ def render_credit_report_page() -> str:
             </div>
           </section>
 
-          <div class="hidden-workspace" aria-hidden="true">
-            <div class="summary" id="summaryItems"></div>
-            <button type="button" id="writeBtn" data-label="Gerar texto técnico"></button>
-            <strong id="statusText">Pronto para gerar</strong>
-            <div id="previewBox"></div>
-          </div>
         </form>
       </div>
     </main>
@@ -1293,15 +1306,11 @@ def render_credit_report_page() -> str:
   const rawData = document.getElementById('rawData');
   const technicalText = document.getElementById('dados');
   const technicalPreview = document.getElementById('technicalPreview');
-  const writeBtn = document.getElementById('writeBtn');
   const writerNotice = document.getElementById('writerNotice');
   const extractBtn = document.getElementById('extractBtn');
   const fieldsEl = document.getElementById('fields');
-  const summaryItems = document.getElementById('summaryItems');
-  const previewBox = document.getElementById('previewBox');
   const missingBox = document.getElementById('missingBox');
   const okBox = document.getElementById('okBox');
-  const statusText = document.getElementById('statusText');
   const statusTile = document.getElementById('statusTile');
   const reviewData = document.getElementById('reviewData');
   const fileInput = document.getElementById('photos');
@@ -1322,7 +1331,6 @@ def render_credit_report_page() -> str:
   let abortController = null;
 
   function setStatus(text) {
-    if (statusText) statusText.textContent = text;
     if (statusTile) statusTile.textContent = text;
   }
 
@@ -1365,8 +1373,6 @@ def render_credit_report_page() -> str:
     technicalText.value = '';
     technicalPreview.value = '';
     fieldsEl.innerHTML = '';
-    summaryItems.innerHTML = '';
-    setPreview('');
     writerNotice.className = 'notice';
     writerNotice.textContent = '';
     okBox.className = 'notice success';
@@ -1401,14 +1407,16 @@ def render_credit_report_page() -> str:
   function setAllBusy(busy, label = 'Gerando') {
     setBusy(submitBtn, busy, label);
     setBusy(downloadBtn, busy, label);
-    setBusy(writeBtn, busy, 'Aguarde');
     setBusy(extractBtn, busy, 'Aguarde');
   }
 
-  function showOverlay(title, text) {
+  const progressBar = document.querySelector('.progress-bar');
+
+  function showOverlay(title, text, pct) {
     overlayTitle.textContent = title;
     overlayText.textContent = text;
     if (cancelBtn) cancelBtn.hidden = false;
+    if (progressBar && typeof pct === 'number') progressBar.style.width = pct + '%';
     overlay.classList.add('show');
   }
 
@@ -1453,12 +1461,11 @@ def render_credit_report_page() -> str:
 
     technicalText.value = payload.report_text || '';
     technicalPreview.value = payload.report_text || '';
-    setPreview(payload.report_text || '');
     renderFields(payload.review);
     captureWriterMeta(payload);
     if (payload.writer && !payload.writer.used_ai) {
       writerNotice.className = 'notice show';
-      writerNotice.textContent = 'Texto gerado no modo local (IA indisponível). Revise o laudo antes de enviar ao banco.';
+      writerNotice.textContent = 'A IA estava indisponível — o texto foi escrito pelo gerador padrão do sistema. Revise o laudo antes de enviar ao banco.';
     } else {
       writerNotice.className = 'notice success show';
       writerNotice.textContent = 'Dados preparados. Gerando a planilha.';
@@ -1482,7 +1489,7 @@ def render_credit_report_page() -> str:
     window.__lastWriter = meta;
     const input = document.getElementById('writerMeta');
     if (input) input.value = JSON.stringify(meta);
-    if (reviewEngine) reviewEngine.textContent = meta.used_ai ? 'Texto: IA (Gemini)' : 'Texto: modo local — revise';
+    if (reviewEngine) reviewEngine.textContent = meta.used_ai ? 'Texto: IA (Gemini)' : 'Texto: gerador padrão — revise';
     return meta;
   }
 
@@ -1518,7 +1525,6 @@ def render_credit_report_page() -> str:
     if (!payload) return;
     lastExtraction = payload;
     fieldsEl.innerHTML = '';
-    renderSummary(payload);
 
     if (payload.missing.length) {
       okBox.textContent = `${payload.summary.found} campos encontrados.`;
@@ -1551,37 +1557,12 @@ def render_credit_report_page() -> str:
       input.value = field.value || '';
       input.addEventListener('input', () => {
         syncReviewData();
-        renderSummaryFromInputs();
       });
       wrapper.appendChild(label);
       wrapper.appendChild(input);
       fieldsEl.appendChild(wrapper);
     });
     syncReviewData();
-  }
-
-  function fieldValue(payload, key) {
-    const item = payload.fields.find((field) => field.key === key);
-    return item && item.value ? item.value : 'Não informado';
-  }
-
-  function renderSummary(payload) {
-    summaryItems.innerHTML = '';
-  }
-
-  function renderSummaryFromInputs() {
-    const getValue = (key) => {
-      const input = fieldsEl.querySelector(`[data-key="${key}"]`);
-      return input && input.value ? input.value : 'Não informado';
-    };
-    renderSummary({
-      fields: [
-        { key: 'cliente', value: getValue('cliente') },
-        { key: 'area_total_ha', value: getValue('area_total_ha') },
-        { key: 'imovel_nome', value: getValue('imovel_nome') },
-        { key: 'atividade_principal', value: getValue('atividade_principal') }
-      ]
-    });
   }
 
   function escapeHtml(value) {
@@ -1593,18 +1574,6 @@ def render_credit_report_page() -> str:
       .replaceAll("'", '&#039;');
   }
 
-  function setPreview(text) {
-    const clean = String(text || '').trim();
-    if (!clean) {
-      previewBox.textContent = '';
-      previewBox.className = 'preview-box empty';
-      return;
-    }
-    const limit = 1500;
-    previewBox.textContent = clean.length > limit ? `${clean.slice(0, limit).trim()}...` : clean;
-    previewBox.className = 'preview-box';
-  }
-
   function syncReviewData() {
     if (!lastExtraction) return;
     const fields = {};
@@ -1614,10 +1583,23 @@ def render_credit_report_page() -> str:
     reviewData.value = JSON.stringify({ parsed: lastExtraction.parsed, fields });
   }
 
-  function showError(message, canRetry) {
+  function showError(message, canRetry, photoError) {
     writerNotice.textContent = message;
     writerNotice.className = 'notice show';
-    if (canRetry) {
+    if (photoError) {
+      const fix = document.createElement('button');
+      fix.type = 'button';
+      fix.className = 'retry-btn';
+      fix.textContent = 'Remover fotos com problema e gerar';
+      fix.addEventListener('click', () => {
+        if (!removeInvalidPhotoNames(message)) {
+          fileInput.value = '';
+          fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        form.requestSubmit();
+      });
+      writerNotice.append(fix);
+    } else if (canRetry) {
       const retry = document.createElement('button');
       retry.type = 'button';
       retry.className = 'retry-btn';
@@ -1646,11 +1628,15 @@ def render_credit_report_page() -> str:
     });
     if (!response.ok) {
       let message = 'Não consegui gerar a planilha. Confira os dados e tente de novo.';
+      let kind = '';
       try {
         const payload = await response.json();
         if (payload.error) message = `Não consegui gerar a planilha: ${payload.error}`;
+        kind = payload.kind || '';
       } catch (parseError) { /* resposta sem JSON: mantém a mensagem padrão */ }
-      throw new Error(message);
+      const error = new Error(message);
+      error.kind = kind;
+      throw error;
     }
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
@@ -1678,12 +1664,40 @@ def render_credit_report_page() -> str:
       <div class="file-pill">
         <span>Foto ${String(index + 1).padStart(2, '0')} - ${escapeHtml(file.name)}</span>
         <small>${Math.max(1, Math.round(file.size / 1024))} KB</small>
+        <button type="button" class="pill-remove" data-remove="${index}" aria-label="Remover ${escapeHtml(file.name)}">&times;</button>
       </div>
     `).join('');
     if (total > 6) {
       fileList.insertAdjacentHTML('beforeend', `<div class="file-pill"><span>Mais ${total - 6} foto(s)</span><small>incluídas</small></div>`);
     }
   });
+
+  fileList.addEventListener('click', (event) => {
+    const remove = event.target.closest('[data-remove]');
+    if (!remove) return;
+    const index = Number(remove.dataset.remove);
+    const transfer = new DataTransfer();
+    Array.from(fileInput.files).forEach((file, i) => {
+      if (i !== index) transfer.items.add(file);
+    });
+    fileInput.files = transfer.files;
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  function removeInvalidPhotoNames(message) {
+    // "Estas fotos não puderam ser lidas: a.jpg, b.jpg. Remova-as..."
+    const match = message.match(/lidas: (.+?)\\. Remova/);
+    if (!match) return false;
+    const badNames = new Set(match[1].split(',').map((name) => name.trim()));
+    const transfer = new DataTransfer();
+    Array.from(fileInput.files).forEach((file) => {
+      if (!badNames.has(file.name)) transfer.items.add(file);
+    });
+    if (transfer.files.length === fileInput.files.length) return false;
+    fileInput.files = transfer.files;
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }
 
   ['dragenter', 'dragover'].forEach((eventName) => {
     uploadButton.addEventListener(eventName, (event) => {
@@ -1720,11 +1734,11 @@ def render_credit_report_page() -> str:
     setAllBusy(true, 'Gerando');
     try {
       if (!technicalText.value.trim()) {
-        showOverlay('Escrevendo relatório', 'Convertendo as anotações em texto técnico.');
+        showOverlay('Escrevendo relatório', 'Convertendo as anotações em texto técnico.', 20);
         await generateTechnicalReport();
       }
       if (!reviewData.value) {
-        showOverlay('Extraindo campos', 'Separando cliente, áreas e propriedades.');
+        showOverlay('Extraindo campos', 'Separando cliente, áreas e propriedades.', 65);
         const ok = await refreshFieldsFromTechnicalText();
         if (!ok) { hideOverlay(); return; }
       }
@@ -1738,15 +1752,16 @@ def render_credit_report_page() -> str:
         return;
       }
       syncReviewData();
-      showOverlay('Gerando planilha', 'Preparando o arquivo para download.');
+      showOverlay('Gerando planilha', 'Preparando o arquivo para download.', 45);
       const filename = await downloadWorkbook();
       if (cancelBtn) cancelBtn.hidden = true;
+      if (progressBar) progressBar.style.width = '100%';
       overlayTitle.textContent = 'Download iniciado';
       overlayText.textContent = 'A planilha foi enviada para o navegador.';
       const localMode = window.__lastWriter && !window.__lastWriter.used_ai;
       writerNotice.className = localMode ? 'notice show' : 'notice success show';
       writerNotice.textContent = localMode
-        ? `Planilha baixada: ${filename}. O texto saiu do modo local (IA indisponível) — revise antes de enviar ao banco.`
+        ? `Planilha baixada: ${filename}. A IA estava indisponível e o texto foi escrito pelo gerador padrão do sistema — revise antes de enviar ao banco.`
         : `Planilha baixada: ${filename}.`;
       setStatus('Planilha baixada');
       setTimeout(hideOverlay, 1200);
@@ -1756,7 +1771,7 @@ def render_credit_report_page() -> str:
       const message = /failed to fetch|networkerror|load failed/i.test(String(error.message))
         ? 'Falha de conexão. Verifique sua internet e tente de novo — suas anotações continuam aqui.'
         : error.message;
-      showError(message, true);
+      showError(message, true, error.kind === 'photos');
     } finally {
       abortController = null;
       setAllBusy(false);
