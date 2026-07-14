@@ -4,11 +4,14 @@ from dataclasses import dataclass
 from email import policy
 from email.parser import BytesParser
 import html
+import io
 import json
 import mimetypes
 import os
 import re
 import uuid
+
+from PIL import Image as PILImage
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -84,6 +87,22 @@ class ReportHandler(BaseHTTPRequestHandler):
 
         data_text = form.getfirst("dados", "")
         review_data = parse_review_data(form.getfirst("review_data", ""), data_text)
+
+        # Valida as fotos ANTES de gerar, nomeando os arquivos originais com
+        # problema — evita falhar no fim do fluxo com mensagem generica.
+        bad_photos = invalid_photo_names(form)
+        if bad_photos:
+            message = (
+                "Estas fotos não puderam ser lidas: "
+                + ", ".join(bad_photos)
+                + ". Remova-as da lista ou gere sem as fotos."
+            )
+            if "application/json" in (self.headers.get("Accept") or ""):
+                self.respond_json({"error": message, "kind": "photos"}, status=400)
+            else:
+                self.respond_html(render_error(message), status=400)
+            return
+
         photos = save_uploaded_files(form, upload_dir, "photos")
         writer_meta = parse_writer_meta(form.getfirst("writer_meta", ""))
         output_path = DEFAULT_OUTPUT_DIR / f"relatorio-{run_id}.xlsx"
@@ -237,6 +256,20 @@ def parse_form_data(content_type: str, body: bytes) -> ParsedForm:
     return form
 
 
+def invalid_photo_names(form: ParsedForm) -> list[str]:
+    """Nomes originais das fotos que o PIL nao consegue abrir."""
+    bad: list[str] = []
+    for item in form.files("photos"):
+        if not item.filename or not item.content:
+            continue
+        try:
+            with PILImage.open(io.BytesIO(item.content)) as image:
+                image.verify()
+        except Exception:
+            bad.append(item.filename)
+    return bad
+
+
 def save_uploaded_files(form: ParsedForm, upload_dir: Path, field_name: str) -> list[Path]:
     saved: list[Path] = []
 
@@ -361,11 +394,12 @@ def parse_writer_meta(raw: str) -> dict | None:
 
 
 def friendly_error_message(exc: Exception) -> str:
-    """Mensagem de erro para o usuario, sem vazar caminhos internos do servidor."""
+    """Mensagem de erro para o usuario, sem vazar caminhos nem jargao interno."""
     text = str(exc)
     if "identify image" in text or "image file" in text:
         return "Uma das fotos não pôde ser lida. Remova a foto com problema e tente de novo."
-    if re.search(r"[A-Za-z]:\\", text):
+    # Caminho de disco, traceback ou nome de excecao: nada disso ajuda o usuario.
+    if not text or re.search(r"[A-Za-z]:\\|Traceback|Error\b|Exception\b", text):
         return "Falha interna ao montar a planilha. Tente de novo; se persistir, gere sem as fotos."
     return text
 
