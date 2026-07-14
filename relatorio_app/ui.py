@@ -1070,24 +1070,7 @@ def render_credit_report_page() -> str:
     .status-tile small { color: var(--forest-700); font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: .04em; }
     .status-tile strong { color: var(--forest-950); font-size: 16px; }
 
-    /* Painel de conferencia (abre apos a extracao, antes do download) */
-    .review-panel { grid-column: 1 / -1; }
-    .review-panel[hidden] { display: none; }
-    .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
-    .field label { margin-bottom: 5px; }
-    .field .required {
-      margin-left: 6px;
-      color: var(--warn);
-      font-size: 10.5px;
-      font-weight: 850;
-      text-transform: uppercase;
-      letter-spacing: .04em;
-    }
-    .field textarea { min-height: 84px; padding: 10px 12px; font-size: 13.5px; line-height: 1.5; }
-    .field.missing input, .field.missing textarea { border-color: var(--warn); background: var(--warn-bg); }
-    #technicalPreview { min-height: 220px; font-size: 13.5px; }
-    .review-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-    .review-actions .btn-primary { min-height: 50px; }
+    .hidden-workspace { display: none; }
 
     /* Overlay de progresso */
     .overlay {
@@ -1218,11 +1201,11 @@ def render_credit_report_page() -> str:
               <div id="writerNotice" class="notice" role="status" aria-live="polite"></div>
 
               <div class="submit-wrap">
-                <button class="btn btn-primary" type="submit" id="submitBtn" data-label="Gerar e conferir">
+                <button class="btn btn-primary" type="submit" id="submitBtn" data-label="Gerar e baixar planilha">
                   <span class="spinner" aria-hidden="true"></span>
-                  <span class="btn-label">Gerar e conferir</span>
+                  <span class="btn-label">Gerar e baixar planilha</span>
                 </button>
-                <p class="muted">O sistema escreve o texto técnico, extrai os campos e mostra tudo para você conferir antes de baixar. Atalho: Ctrl+Enter.</p>
+                <p class="muted">O texto técnico e a extração acontecem automaticamente antes do download. Atalho: Ctrl+Enter.</p>
               </div>
 
               <input type="hidden" id="reviewData" name="review_data">
@@ -1253,35 +1236,13 @@ def render_credit_report_page() -> str:
             </section>
           </aside>
 
-          <section class="panel review-panel" id="reviewPanel" hidden>
-            <div class="panel-head">
-              <h2 class="panel-title">
-                <svg viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                Conferência antes do download
-              </h2>
-              <span class="panel-kicker" id="reviewEngine"></span>
-            </div>
-            <div class="panel-body">
-              <div id="okBox" class="notice success"></div>
-              <div id="missingBox" class="notice" role="status" aria-live="polite"></div>
-              <div>
-                <label for="technicalPreview">Texto técnico do laudo (edite direto se precisar)</label>
-                <textarea id="technicalPreview"></textarea>
-              </div>
-              <div id="fields" class="fields"></div>
-              <div class="review-actions">
-                <button class="btn btn-primary" type="submit" id="downloadBtn" data-label="Baixar planilha">
-                  <span class="spinner" aria-hidden="true"></span>
-                  <span class="btn-label">Baixar planilha</span>
-                </button>
-                <button type="button" class="btn btn-ghost" id="extractBtn" data-label="Atualizar extração">
-                  <span class="spinner" aria-hidden="true"></span>
-                  <span class="btn-label">Atualizar extração</span>
-                </button>
-              </div>
-            </div>
-          </section>
-
+          <div class="hidden-workspace" aria-hidden="true">
+            <div id="okBox"></div>
+            <div id="missingBox"></div>
+            <textarea id="technicalPreview"></textarea>
+            <div id="fields"></div>
+            <button type="button" id="extractBtn" data-label="Atualizar extração"></button>
+          </div>
         </form>
       </div>
     </main>
@@ -1319,9 +1280,6 @@ def render_credit_report_page() -> str:
   const overlayText = document.getElementById('overlayText');
   const clearPhotosBtn = document.getElementById('clearPhotosBtn');
   const cancelBtn = document.getElementById('cancelBtn');
-  const reviewPanel = document.getElementById('reviewPanel');
-  const downloadBtn = document.getElementById('downloadBtn');
-  const reviewEngine = document.getElementById('reviewEngine');
   let lastExtraction = null;
   let abortController = null;
 
@@ -1398,7 +1356,6 @@ def render_credit_report_page() -> str:
     setStatus('Pronto para gerar');
     reviewData.value = '';
     lastExtraction = null;
-    if (reviewPanel) reviewPanel.hidden = true;
     if (fileInput) fileInput.value = '';
     if (fileCount) fileCount.textContent = 'Nenhuma foto selecionada';
     if (fileList) fileList.innerHTML = '';
@@ -1422,7 +1379,6 @@ def render_credit_report_page() -> str:
 
   function setAllBusy(busy, label = 'Gerando') {
     setBusy(submitBtn, busy, label);
-    setBusy(downloadBtn, busy, label);
     setBusy(extractBtn, busy, 'Aguarde');
   }
 
@@ -1505,7 +1461,6 @@ def render_credit_report_page() -> str:
     window.__lastWriter = meta;
     const input = document.getElementById('writerMeta');
     if (input) input.value = JSON.stringify(meta);
-    if (reviewEngine) reviewEngine.textContent = meta.used_ai ? 'Texto: IA (Gemini)' : 'Texto: gerador padrão — revise';
     return meta;
   }
 
@@ -1757,15 +1712,6 @@ def render_credit_report_page() -> str:
         showOverlay('Extraindo campos', 'Separando cliente, áreas e propriedades.', 65);
         const ok = await refreshFieldsFromTechnicalText();
         if (!ok) { hideOverlay(); return; }
-      }
-      // Primeira passagem: abre a conferencia em vez de baixar direto.
-      // O download so acontece a partir do botao do painel de conferencia.
-      if (reviewPanel && reviewPanel.hidden) {
-        hideOverlay();
-        reviewPanel.hidden = false;
-        setStatus('Confira e baixe');
-        reviewPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        return;
       }
       syncReviewData();
       showOverlay('Gerando planilha', 'Preparando o arquivo para download.', 45);
