@@ -38,6 +38,8 @@ DEFAULT_TEMPLATE = ROOT_DIR / "templates" / "relatorio-modelo.xlsx"
 DEFAULT_OUTPUT_DIR = ROOT_DIR / "outputs"
 PHOTO_BORDER_PX = 3
 PHOTO_BORDER_COLOR = (0, 0, 0)
+PHOTO_SLOT_GAP_PT = 9  # folga abaixo de cada foto (12px) para nao encostar na legenda seguinte
+PHOTO_EXTRA_SLOT_ROWS = 21  # legenda + 20 linhas de imagem, mesmo passo dos ultimos slots do modelo
 PROPERTY_START_ROW = 18
 PROPERTY_TEMPLATE_END_ROW = 21
 PROPERTY_INSERT_AT_ROW = 22
@@ -1838,10 +1840,30 @@ def adjust_dynamic_row_heights(worksheet: Worksheet) -> None:
         worksheet.row_dimensions[4].height = max(96, min(210, line_count * 18 + 18))
 
 
+def photo_anchor(index: int) -> tuple[int, int, int, int]:
+    """Slot da foto ``index``; alem dos 39 do modelo, gera slots novos abaixo.
+
+    Sem limite de fotos: o agronomo envia quantas precisar e os slots extras
+    seguem o mesmo passo dos ultimos slots do template.
+    """
+    if index < len(PHOTO_ANCHORS):
+        return PHOTO_ANCHORS[index]
+    extra = index - len(PHOTO_ANCHORS)
+    from_row = PHOTO_ANCHORS[-1][2] + 2 + extra * PHOTO_EXTRA_SLOT_ROWS
+    return (from_row, 3, from_row + PHOTO_EXTRA_SLOT_ROWS - 1, 10)
+
+
+def extend_print_area(worksheet: Worksheet, photo_count: int, row_offset: int = 0) -> None:
+    """Area de impressao acompanha linhas inseridas e slots gerados alem do modelo."""
+    bottom = photo_anchor(max(photo_count, len(PHOTO_ANCHORS)) - 1)[2]
+    worksheet.print_area = f"A1:N{shifted_row(bottom + 2, row_offset)}"
+
+
 def apply_photos(worksheet: Worksheet, photo_paths: list[str | Path], image_output_dir: Path, row_offset: int = 0) -> None:
     valid_photos = unique_existing_photo_paths(photo_paths)
     remove_old_report_photos(worksheet)
     clear_photo_slots(worksheet, row_offset)
+    extend_print_area(worksheet, len(valid_photos), row_offset)
     if not valid_photos:
         return
 
@@ -1849,8 +1871,8 @@ def apply_photos(worksheet: Worksheet, photo_paths: list[str | Path], image_outp
     for old_photo in image_output_dir.glob("foto-*.jpg"):
         old_photo.unlink(missing_ok=True)
 
-    for index, photo_path in enumerate(valid_photos[: len(PHOTO_ANCHORS)]):
-        from_row, from_col, to_row, to_col = PHOTO_ANCHORS[index]
+    for index, photo_path in enumerate(valid_photos):
+        from_row, from_col, to_row, to_col = photo_anchor(index)
         from_row = shifted_row(from_row + 1, row_offset) - 1
         to_row = shifted_row(to_row + 1, row_offset) - 1
         format_photo_slot(worksheet, index + 1, from_row, from_col, to_row, to_col)
@@ -1917,6 +1939,15 @@ def format_photo_slot(worksheet: Worksheet, number: int, from_row: int, from_col
     caption_cell.alignment = Alignment(horizontal="left", vertical="center")
     worksheet.row_dimensions[start_row].height = max(18, worksheet.row_dimensions[start_row].height or 0)
 
+    # As alturas do template variam por slot; alguns somam menos que a imagem
+    # (360px) e a foto invadia a legenda do slot seguinte. Redistribui as
+    # linhas do slot para caber a imagem mais uma folga fixa.
+    image_rows = range(start_row + 1, end_row + 1)
+    if len(image_rows):
+        total_pt = PHOTO_MAX_SIZE[1] * 0.75 + PHOTO_SLOT_GAP_PT
+        for row in image_rows:
+            worksheet.row_dimensions[row].height = total_pt / len(image_rows)
+
     for row in range(start_row, end_row + 1):
         for col in range(start_col, end_col + 1):
             worksheet.cell(row=row, column=col).border = Border()
@@ -1947,9 +1978,15 @@ def prepare_photo(photo_path: Path, output_dir: Path, index: int) -> Path:
             max(1, PHOTO_MAX_SIZE[0] - PHOTO_BORDER_PX * 2),
             max(1, PHOTO_MAX_SIZE[1] - PHOTO_BORDER_PX * 2),
         )
-        fitted = image.resize(inner_size, Image.Resampling.LANCZOS)
+        fitted = ImageOps.contain(image, inner_size, Image.Resampling.LANCZOS)
         framed = Image.new("RGB", PHOTO_MAX_SIZE, PHOTO_BORDER_COLOR)
-        framed.paste(fitted, (PHOTO_BORDER_PX, PHOTO_BORDER_PX))
+        framed.paste(
+            fitted,
+            (
+                (PHOTO_MAX_SIZE[0] - fitted.width) // 2,
+                (PHOTO_MAX_SIZE[1] - fitted.height) // 2,
+            ),
+        )
         framed.save(output_path, quality=88, optimize=True)
     return output_path
 
@@ -1961,7 +1998,11 @@ def collect_photos(photo_dir: str | Path | None) -> list[Path]:
     if not root.exists():
         return []
     allowed = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
-    return sorted(path for path in root.iterdir() if path.suffix.lower() in allowed)
+
+    def natural_key(path: Path) -> list:
+        return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", path.name)]
+
+    return sorted((path for path in root.iterdir() if path.suffix.lower() in allowed), key=natural_key)
 
 
 def load_data_argument(data_arg: str | None, data_file: str | None) -> str:

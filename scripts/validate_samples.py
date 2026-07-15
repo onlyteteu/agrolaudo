@@ -570,15 +570,14 @@ def main() -> None:
     )
     prepared_coordinate_photo = OUTPUT_DIR / "foto-coordenada-preservada-images" / "foto-01.jpg"
     with Image.open(prepared_coordinate_photo) as image:
-        preserved_corner = False
-        for x in range(3, 14):
-            for y in range(3, 14):
-                red, green, blue = image.getpixel((x, y))
-                if red > 150 and green < 90 and blue < 90:
-                    preserved_corner = True
-                    break
-            if preserved_corner:
-                break
+        # O letterbox centraliza a foto, entao o marcador pode se deslocar;
+        # o que nao pode e sumir (corte do canto com a coordenada).
+        pixels = image.load()
+        preserved_corner = any(
+            pixels[x, y][0] > 150 and pixels[x, y][1] < 90 and pixels[x, y][2] < 90
+            for y in range(image.height)
+            for x in range(image.width)
+        )
         if not preserved_corner:
             raise AssertionError("canto superior esquerdo da foto foi cortado")
 
