@@ -92,10 +92,38 @@ def main() -> None:
     assert_equal(ws["D19"].value, 200.0, "area total propriedade 2 em D19")
     assert_equal(ws["A27"].value.startswith("Na Fazenda Boa Vista"), True, "benfeitorias bloco 1 em A27")
     assert_equal(ws["A30"].value.startswith("Na Fazenda Santa Luzia"), True, "benfeitorias bloco 2 em A30")
+    # O template traz as linhas 27-29 ocultas; o laudo gerado nao pode
+    # esconder o primeiro bloco de benfeitorias.
+    for row in range(27, 34):
+        dim = ws.row_dimensions.get(row)
+        hidden = bool(dim.hidden) if dim is not None else False
+        assert_equal(hidden, False, f"linha {row} de benfeitorias visivel")
     assert_equal(ws["A51"].value, "Trator Massey Ferguson 4292", "equipamento 1 em A51")
     assert_equal(ws["A52"].value, "Grade aradora 16 discos", "equipamento 2 em A52")
     assert_equal(ws["J4"].value, "Data da Visita:15/06/2026", "data da visita em J4")
     assert_equal(ws["B193"].value.startswith("Atividade regular"), True, "conclusao em B193")
+
+    # Com 8 imoveis ha insercao de linhas (propriedades E benfeitorias); as
+    # flags de linha oculta do template precisam acompanhar o deslocamento,
+    # senao escondem equipamentos/benfeitorias (insert_rows nao move
+    # row_dimensions). Invariante: linha com conteudo nunca fica oculta.
+    big = coerce_structured_data(
+        {
+            "cliente": "Teste Offset",
+            "imoveis": [{"nome": f"Fazenda {i}", "area_total_ha": 10.0 + i} for i in range(8)],
+            "benfeitorias_descricao": " ".join(f"Na Fazenda {i}, ha curral e cochos." for i in range(8)),
+            "benfeitorias_conservacao": "BOM",
+            "equipamentos": [{"descricao": "Trator Massey Ferguson 4292"}],
+        }
+    )
+    big_output = generate_report(big, output_path=OUTPUT_DIR / "estruturado-8-imoveis.xlsx")
+    big_ws = load_workbook(big_output).active
+    for row in range(8, 201):  # linha 7 e campo opcional oculto de proposito no modelo
+        dim = big_ws.row_dimensions.get(row)
+        if dim is None or not dim.hidden:
+            continue
+        content = [cell.value for cell in big_ws[row][:11] if cell.value not in (None, "")]
+        assert_equal(content, [], f"linha {row} oculta com conteudo")
 
     print("OK: caminho estruturado (dict da IA -> planilha) validado.")
 

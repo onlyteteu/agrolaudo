@@ -963,6 +963,10 @@ def generate_report(
     workbook = load_workbook(template)
     worksheet = workbook[SHEET_NAME] if SHEET_NAME in workbook.sheetnames else workbook.active
 
+    # O modelo vem com as linhas do primeiro bloco de benfeitorias ocultas e
+    # insert_rows nao desloca essa flag: desoculta ANTES de inserir linhas,
+    # senao a flag cai sobre outro conteudo deslocado.
+    unhide_benfeitoria_template_rows(worksheet)
     row_offset = prepare_property_rows(worksheet, data)
     clear_variable_model_values(worksheet, row_offset)
     benfeitoria_blocks = split_benfeitoria_blocks(data.get("benfeitorias_descricao"))
@@ -1038,6 +1042,7 @@ def prepare_property_rows(worksheet: Worksheet, data: dict[str, Any]) -> int:
 
     shifted_merges = collect_shifted_merged_ranges(worksheet, PROPERTY_INSERT_AT_ROW, extra_rows)
     worksheet.insert_rows(PROPERTY_INSERT_AT_ROW, extra_rows)
+    shift_row_dimensions(worksheet, PROPERTY_INSERT_AT_ROW, extra_rows)
     for merge_range in shifted_merges:
         worksheet.merge_cells(merge_range)
     for row in range(PROPERTY_INSERT_AT_ROW, PROPERTY_INSERT_AT_ROW + extra_rows):
@@ -1093,6 +1098,12 @@ def split_benfeitorias_property_scope(value: Any) -> tuple[str, str | None]:
     return property_text, general or None
 
 
+def unhide_benfeitoria_template_rows(worksheet: Worksheet) -> None:
+    for start, end in BENFEITORIA_BASE_BLOCKS:
+        for row in range(start, end + 1):
+            worksheet.row_dimensions[row].hidden = False
+
+
 def prepare_benfeitoria_rows(worksheet: Worksheet, blocks: list[str], property_offset: int = 0) -> int:
     extra_blocks = max(0, len(blocks) - len(BENFEITORIA_BASE_BLOCKS))
     extra_rows = extra_blocks * BENFEITORIA_EXTRA_BLOCK_HEIGHT
@@ -1102,6 +1113,7 @@ def prepare_benfeitoria_rows(worksheet: Worksheet, blocks: list[str], property_o
     insert_at = BENFEITORIA_INSERT_AT_ROW + property_offset
     shifted_merges = collect_shifted_merged_ranges(worksheet, insert_at, extra_rows)
     worksheet.insert_rows(insert_at, extra_rows)
+    shift_row_dimensions(worksheet, insert_at, extra_rows)
     for merge_range in shifted_merges:
         worksheet.merge_cells(merge_range)
 
@@ -1110,6 +1122,19 @@ def prepare_benfeitoria_rows(worksheet: Worksheet, blocks: list[str], property_o
         copy_row_style(worksheet, source_rows[index % len(source_rows)], row)
         worksheet.row_dimensions[row].height = 24
     return extra_rows
+
+
+def shift_row_dimensions(worksheet: Worksheet, insert_at: int, amount: int) -> None:
+    """insert_rows do openpyxl NAO desloca row_dimensions: alturas e linhas
+    ocultas ficam presas no numero absoluto e caem sobre conteudo deslocado
+    (ex.: sobras ocultas do template escondendo equipamentos). Move junto."""
+    dimensions = worksheet.row_dimensions
+    for row in sorted((r for r in dimensions if r >= insert_at), reverse=True):
+        source = dimensions[row]
+        target = dimensions[row + amount]
+        target.height = source.height
+        target.hidden = source.hidden
+        del dimensions[row]
 
 
 def collect_shifted_merged_ranges(worksheet: Worksheet, insert_at: int, amount: int) -> list[str]:
@@ -1350,7 +1375,9 @@ def adjust_benfeitoria_row_heights(worksheet: Worksheet, start_row: int, end_row
     rows = max(1, end_row - start_row + 1)
     row_height = total_height / rows
     for row in range(start_row, end_row + 1):
-        worksheet.row_dimensions[row].height = max(18, row_height)
+        dimension = worksheet.row_dimensions[row]
+        dimension.height = max(18, row_height)
+        dimension.hidden = False
 
 
 def apply_fields(worksheet: Worksheet, data: dict[str, Any], row_offset: int = 0, below_benfeitoria_offset: int | None = None) -> None:
