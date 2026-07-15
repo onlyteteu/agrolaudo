@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
 from email import policy
 from email.parser import BytesParser
@@ -9,6 +10,7 @@ import json
 import mimetypes
 import os
 import re
+import threading
 import uuid
 
 from PIL import Image as PILImage
@@ -18,6 +20,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote
 
 from relatorio_app.ai_writer import generate_technical_report_auto
+from relatorio_app.env import load_env_file
 from relatorio_app.pattern_library import select_pattern_examples
 from relatorio_app.report_engine import DEFAULT_OUTPUT_DIR, generate_report, parse_decimal_pt, parse_report_data
 from relatorio_app.ui import render_credit_report_page as render_premium_credit_report_page
@@ -25,6 +28,8 @@ from relatorio_app.ui import render_home as render_premium_home
 
 ROOT_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = ROOT_DIR / "uploads"
+VISITS_FILE = ROOT_DIR / "outputs" / "visitas.jsonl"
+VISITS_LOCK = threading.Lock()
 
 REVIEW_FIELDS = [
     {"key": "cliente", "label": "Produtor / cliente", "required": True, "type": "text"},
@@ -57,12 +62,53 @@ class ReportHandler(BaseHTTPRequestHandler):
             self.serve_output_file()
             return
         if path in ("", "/", "/index.html"):
+            self.track_visit("pagina inicial")
             self.respond_html(render_premium_home())
             return
         if path == "/relatorio-credito":
+            self.track_visit("ferramenta")
             self.respond_html(render_premium_credit_report_page())
             return
+        if path == "/admin":
+            self.handle_admin()
+            return
         self.send_error(404)
+
+    def track_visit(self, event: str) -> None:
+        """Registra o acesso em visitas.jsonl; nunca derruba a requisicao."""
+        try:
+            forwarded = self.headers.get("X-Forwarded-For", "")
+            ip = forwarded.split(",")[0].strip() if forwarded else self.client_address[0]
+            entry = {
+                "quando": datetime.now().isoformat(timespec="seconds"),
+                "o_que": event,
+                "ip": ip,
+                "navegador": (self.headers.get("User-Agent") or "")[:180],
+            }
+            with VISITS_LOCK:
+                VISITS_FILE.parent.mkdir(parents=True, exist_ok=True)
+                with VISITS_FILE.open("a", encoding="utf-8") as file:
+                    file.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
+
+    def handle_admin(self) -> None:
+        senha = os.environ.get("ADMIN_SENHA", "")
+        if not senha:
+            # Sem senha configurada a pagina "nao existe" — nada exposto.
+            self.send_error(404)
+            return
+
+        auth = self.headers.get("Authorization", "")
+        expected = "Basic " + base64.b64encode(f"admin:{senha}".encode()).decode()
+        if auth != expected:
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", 'Basic realm="AgroLaudo admin"')
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+
+        self.respond_html(render_admin_page(load_visits()))
 
     def do_POST(self) -> None:
         if self.path == "/write-technical-report":
@@ -119,6 +165,7 @@ class ReportHandler(BaseHTTPRequestHandler):
                 self.respond_html(render_error(message), status=500)
             return
 
+        self.track_visit("gerou planilha")
         self.serve_file(generated, download_name=generated.name)
 
     def handle_extract(self) -> None:
@@ -433,7 +480,68 @@ def render_error(message: str) -> str:
 </html>"""
 
 
+def load_visits(limit: int = 300) -> list[dict]:
+    if not VISITS_FILE.exists():
+        return []
+    entries = []
+    for line in VISITS_FILE.read_text(encoding="utf-8").splitlines()[-limit:]:
+        try:
+            entries.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return entries
+
+
+def render_admin_page(visits: list[dict]) -> str:
+    por_dia: dict[str, int] = {}
+    for visit in visits:
+        dia = str(visit.get("quando", ""))[:10]
+        if dia:
+            por_dia[dia] = por_dia.get(dia, 0) + 1
+    resumo = " · ".join(f"{dia}: {count}" for dia, count in sorted(por_dia.items(), reverse=True)[:14])
+
+    linhas = []
+    for visit in reversed(visits):
+        quando = html.escape(str(visit.get("quando", "")).replace("T", " "))
+        linhas.append(
+            "<tr>"
+            f"<td>{quando}</td>"
+            f"<td>{html.escape(str(visit.get('o_que', '')))}</td>"
+            f"<td>{html.escape(str(visit.get('ip', '')))}</td>"
+            f"<td class=\"ua\">{html.escape(str(visit.get('navegador', '')))}</td>"
+            "</tr>"
+        )
+    corpo = "\n".join(linhas) or '<tr><td colspan="4">Nenhuma visita registrada ainda.</td></tr>'
+
+    return f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<title>AgroLaudo — Acessos</title>
+<style>
+  body {{ font-family: Inter, "Segoe UI", system-ui, Arial, sans-serif; background: #f1f4ea; color: #101d15; margin: 0; padding: 24px; }}
+  h1 {{ font-size: 20px; }}
+  .resumo {{ color: #3c5344; margin-bottom: 16px; }}
+  table {{ border-collapse: collapse; width: 100%; background: #fff; border-radius: 10px; overflow: hidden; }}
+  th, td {{ text-align: left; padding: 8px 12px; border-bottom: 1px solid #e2e8da; font-size: 14px; }}
+  th {{ background: #173b2c; color: #fff; }}
+  .ua {{ color: #5b6f61; font-size: 12px; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+</style>
+</head>
+<body>
+  <h1>Acessos ao AgroLaudo ({len(visits)} registros)</h1>
+  <p class="resumo">{html.escape(resumo) if resumo else "Sem visitas ainda."}</p>
+  <table>
+    <tr><th>Quando</th><th>O quê</th><th>IP</th><th>Navegador</th></tr>
+    {corpo}
+  </table>
+</body>
+</html>"""
+
+
 def main() -> None:
+    load_env_file()
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     port = int(os.environ.get("PORT", "8000"))
