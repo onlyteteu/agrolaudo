@@ -1206,11 +1206,13 @@ def apply_property_rows(worksheet: Worksheet, data: dict[str, Any]) -> None:
     for index, item in enumerate(properties):
         row = PROPERTY_START_ROW + index
         set_cell(worksheet, f"A{row}", upper_field(item.get("nome")))
-        set_cell(worksheet, f"D{row}", item.get("area_total_ha"))
-        set_cell(worksheet, f"E{row}", item.get("area_pastagens_ha"))
-        set_cell(worksheet, f"F{row}", item.get("area_cultivo_ha"))
-        set_cell(worksheet, f"G{row}", item.get("area_financiada_bb_ha"))
-        set_cell(worksheet, f"H{row}", item.get("area_financiada_outros_ha"))
+        # Areas viram numero de verdade na celula (entrada pode trazer
+        # "120,5" como texto, que o Excel nao soma nem formata).
+        set_cell(worksheet, f"D{row}", parse_decimal_pt(item.get("area_total_ha")))
+        set_cell(worksheet, f"E{row}", parse_decimal_pt(item.get("area_pastagens_ha")))
+        set_cell(worksheet, f"F{row}", parse_decimal_pt(item.get("area_cultivo_ha")))
+        set_cell(worksheet, f"G{row}", parse_decimal_pt(item.get("area_financiada_bb_ha")))
+        set_cell(worksheet, f"H{row}", parse_decimal_pt(item.get("area_financiada_outros_ha")))
         set_cell(worksheet, f"I{row}", upper_field(item.get("atividade_principal")))
         set_cell(worksheet, f"K{row}", upper_field(item.get("principais_culturas")))
 

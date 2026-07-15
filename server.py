@@ -162,9 +162,9 @@ class ReportHandler(BaseHTTPRequestHandler):
         self.respond_json(response)
 
     def serve_output_file(self) -> None:
-        requested = unquote(self.path.removeprefix("/outputs/"))
+        requested = unquote(self.path.split("?", 1)[0].removeprefix("/outputs/"))
         path = (DEFAULT_OUTPUT_DIR / requested).resolve()
-        if not str(path).startswith(str(DEFAULT_OUTPUT_DIR.resolve())) or not path.exists():
+        if not path.is_relative_to(DEFAULT_OUTPUT_DIR.resolve()) or not path.is_file():
             self.send_error(404)
             return
         self.serve_file(path, download_name=path.name)
@@ -274,7 +274,9 @@ def save_uploaded_files(form: ParsedForm, upload_dir: Path, field_name: str) -> 
     saved: list[Path] = []
 
     for index, item in enumerate(form.files(field_name), start=1):
-        if not item.filename:
+        # Sem conteudo (upload falhou no navegador) nao vira arquivo: um
+        # 0-byte passava na validacao e estourava na hora de montar a foto.
+        if not item.filename or not item.content:
             continue
         suffix = Path(item.filename).suffix.lower() or ".jpg"
         destination = upload_dir / f"foto-{index:02d}{suffix}"
